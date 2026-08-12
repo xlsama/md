@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+.turbo/
+.vite/
+coverage/
+*.tsbuildinfo
+.env
+.env.local
+packages/md/web-dist/
+packages/md/README.md
+packages/md/LICENSE
+*.tgz

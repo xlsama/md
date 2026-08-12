@@ -1,0 +1,53 @@
+{
+  "name": "mdopen",
+  "version": "0.1.0",
+  "description": "Edit local Markdown in your browser: one `md` command, live sync with AI-agent edits, auto-format on save. 浏览器里的本地 Markdown 编辑器。",
+  "type": "module",
+  "license": "MIT",
+  "author": "xlsama",
+  "homepage": "https://github.com/xlsama/mdopen#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xlsama/mdopen.git"
+  },
+  "bugs": "https://github.com/xlsama/mdopen/issues",
+  "keywords": [
+    "markdown",
+    "editor",
+    "browser",
+    "wysiwyg",
+    "bun",
+    "meowdown",
+    "autocorrect",
+    "oxfmt"
+  ],
+  "bin": {
+    "md": "./src/cli.ts"
+  },
+  "files": [
+    "src",
+    "web-dist"
+  ],
+  "exports": {
+    ".": "./src/daemon.ts",
+    "./protocol": "./src/protocol.ts"
+  },
+  "scripts": {
+    "dev": "bun run --watch src/cli.ts daemon",
+    "start": "bun run src/cli.ts daemon",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm -w build && rm -rf web-dist && cp -R ../web/dist web-dist && cp ../../README.md ../../LICENSE ."
+  },
+  "engines": {
+    "bun": ">=1.2.0"
+  },
+  "dependencies": {
+    "@hono/zod-validator": "^0.9.0",
+    "autocorrect-node": "^2.14.0",
+    "hono": "^4.13.1",
+    "oxfmt": "^0.63.0",
+    "trash": "^10.1.1",
+    "zod": "^4.4.3"
+  }
+}

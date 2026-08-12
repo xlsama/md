@@ -1,0 +1,20 @@
+{
+  "name": "md-workspace",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "build": "pnpm --filter @md/web build",
+    "start": "pnpm --filter mdopen start",
+    "test": "pnpm -r test",
+    "lint": "oxlint --fix",
+    "release": "bumpp -r"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "bumpp": "latest",
+    "oxlint": "latest",
+    "oxlint-tsgolint": "^7.0.2001",
+    "typescript": "latest"
+  }
+}

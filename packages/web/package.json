@@ -1,0 +1,40 @@
+{
+  "name": "@md/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "bun test",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@iconify-icons/lucide": "latest",
+    "@iconify/react": "latest",
+    "mdopen": "workspace:*",
+    "@meowdown/core": "latest",
+    "@meowdown/react": "latest",
+    "@pierre/diffs": "latest",
+    "@pierre/theme": "latest",
+    "@pierre/theming": "latest",
+    "@pierre/trees": "latest",
+    "@shikijs/themes": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "shiki": "latest",
+    "zod": "latest",
+    "zustand": "latest"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "latest",
+    "@types/bun": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@vitejs/plugin-react": "latest",
+    "tailwindcss": "latest",
+    "typescript": "latest",
+    "vite": "latest"
+  }
+}

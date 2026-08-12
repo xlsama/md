@@ -1,0 +1,115 @@
+@import 'tailwindcss';
+@import '@meowdown/core/style.css';
+@import '@meowdown/react/style.css';
+
+@theme {
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
+    sans-serif;
+}
+
+:root {
+  /* Drives the light-dark() colors used by the meowdown stylesheets. */
+  color-scheme: light dark;
+
+  --md-bg: light-dark(oklch(99% 0 0), oklch(17.5% 0.005 286));
+  --md-panel: light-dark(oklch(98% 0.002 286), oklch(21% 0.006 286));
+  --md-border: light-dark(oklch(92.5% 0.004 286), oklch(30% 0.008 286));
+  --md-fg: light-dark(oklch(30% 0.01 286), oklch(90% 0.005 286));
+  --md-muted: light-dark(oklch(55% 0.012 286), oklch(65% 0.012 286));
+  --md-accent: light-dark(oklch(64.6% 0.194 41), oklch(75.8% 0.159 56));
+  --md-hover: light-dark(oklch(95.5% 0.003 286), oklch(26% 0.007 286));
+
+  /* Floating surfaces sit a step above the panel so they read as detached. */
+  --md-menu-bg: light-dark(oklch(100% 0 0), oklch(25.5% 0.006 286));
+  --md-menu-border: light-dark(oklch(91% 0.004 286), oklch(33% 0.008 286));
+  --md-menu-hover: light-dark(oklch(95% 0.003 286), oklch(31% 0.008 286));
+  --md-menu-shadow: light-dark(
+    0 12px 32px -12px oklch(0% 0 0 / 0.22),
+    0 12px 32px -10px oklch(0% 0 0 / 0.6)
+  );
+  --md-tooltip-bg: light-dark(oklch(26% 0.008 286), oklch(30% 0.008 286));
+  --md-tooltip-fg: light-dark(oklch(98% 0 0), oklch(95% 0.003 286));
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--md-bg);
+  color: var(--md-fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The editor column owns the vertical scroll; the editor fills it exactly so a
+   short document does not grow a scrollbar, and clicking the empty space below
+   the last line still lands in the document. */
+.md-editor-host .meowdown {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+}
+
+.md-editor-host .meowdown-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding-bottom: 6rem;
+}
+
+.md-editor-host .ProseMirror {
+  flex: 1;
+}
+
+/* Pierre trees renders into a shadow root; align it with our palette. */
+.md-tree {
+  --trees-fg-override: var(--md-fg);
+  --trees-border-color-override: transparent;
+  --trees-selected-bg-override: color-mix(in oklab, var(--md-accent) 18%, transparent);
+}
+
+@keyframes md-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.md-fade-in {
+  animation: md-fade-in 0.18s ease-out;
+}
+
+.md-menu {
+  box-shadow: var(--md-menu-shadow);
+}
+
+.md-tooltip {
+  background: var(--md-tooltip-bg);
+  color: var(--md-tooltip-fg);
+  box-shadow: var(--md-menu-shadow);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 9999px;
+  background-color: color-mix(in oklab, var(--md-muted) 35%, transparent);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in oklab, var(--md-muted) 60%, transparent);
+}
