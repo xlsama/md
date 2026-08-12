@@ -98,6 +98,24 @@ async function waitForHealth(port: number, timeoutMs = 5000): Promise<HealthResp
   return null;
 }
 
+async function restartDaemon(port: number, pid: number): Promise<HealthResponse | null> {
+  try {
+    process.kill(pid, 'SIGTERM');
+  } catch {}
+  const deadline = Date.now() + 4000;
+  while (Date.now() < deadline) {
+    const health = await fetchHealth(port, 400);
+    // launchd（KeepAlive）可能已用新代码拉起；没有 launchd 时进程消失后由我们自己拉
+    if (health?.version === pkg.version) return health;
+    if (!health) {
+      await spawnDaemon(port);
+      return waitForHealth(port);
+    }
+    await Bun.sleep(150);
+  }
+  return null;
+}
+
 async function openBrowser(url: string): Promise<void> {
   const cmd = process.platform === 'darwin' ? ['open', url] : ['xdg-open', url];
   try {
@@ -118,6 +136,11 @@ async function commandOpen(target: string | undefined, port: number): Promise<vo
   if (!fs.existsSync(resolved)) fail(`path not found: ${resolved}`);
 
   let health = await fetchHealth(port);
+  if (health && health.version !== pkg.version) {
+    console.log(`md: daemon ${health.version} → ${pkg.version}，重启中…`);
+    health = await restartDaemon(port, health.pid);
+    if (!health) fail(`daemon restart failed on port ${port} — see ${logPath()}`);
+  }
   if (!health) {
     await spawnDaemon(port);
     health = await waitForHealth(port);
@@ -136,7 +159,7 @@ async function commandOpen(target: string | undefined, port: number): Promise<vo
     fail(`open failed: ${message}`);
   }
   const data = (await res.json()) as OpenResponse;
-  if (data.clients === 0) {
+  if (data.clients === 0 && process.env['MD_NO_OPEN'] !== '1') {
     await openBrowser(data.url);
     console.log(`md: opened ${data.url}`);
   } else {

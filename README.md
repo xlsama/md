@@ -23,6 +23,12 @@ Edit local Markdown files in your browser. One `md` command — a tiny local dae
 bun add -g mdopen   # or: pnpm add -g mdopen
 ```
 
+升级后无需手动重启：下次运行 `md` 时 CLI 发现常驻 daemon 版本不一致会自动重启它，已打开的页面自动重连。Upgrades are seamless — the next `md` run detects the version mismatch, restarts the daemon, and open tabs reconnect automatically.
+
+```bash
+bun add -g mdopen@latest   # upgrade
+```
+
 ## 使用 / Usage
 
 ```bash

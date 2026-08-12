@@ -34,6 +34,7 @@ export interface DaemonOptions {
   webDist?: string;
   persistState?: boolean;
   writePidFile?: boolean;
+  version?: string;
 }
 
 interface WSData {
@@ -316,7 +317,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<DaemonHa
     workspace,
     clients,
     webDist,
-    version: pkg.version,
+    version: options.version ?? pkg.version,
     broadcast,
     send: (ws, msg) => {
       try {
