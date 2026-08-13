@@ -39,18 +39,6 @@ md service uninstall
 - Default port `2233` (override with `--port` / `MD_PORT`), bound to `127.0.0.1` only
 - Settings live in `~/.config/writedown/settings.json`, also editable in the in-app settings dialog
 
-## Development
-
-```bash
-pnpm install
-pnpm dev      # daemon (2233) + Vite (5173)
-pnpm test     # server e2e + web unit tests
-pnpm lint
-pnpm build
-```
-
-Architecture and protocol live in [DESIGN.md](./DESIGN.md) (Chinese).
-
 ## License
 
 [MIT](./LICENSE)

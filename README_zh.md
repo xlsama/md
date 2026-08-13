@@ -39,18 +39,6 @@ md service uninstall # 取消开机自启
 - 端口默认 `2233`，可用 `--port` 或 `MD_PORT` 覆盖，只监听 `127.0.0.1`
 - 配置位于 `~/.config/writedown/settings.json`，也可在应用内设置面板修改
 
-## 开发
-
-```bash
-pnpm install
-pnpm dev      # daemon（2233）+ Vite（5173）
-pnpm test     # server e2e + web 单元测试
-pnpm lint
-pnpm build
-```
-
-架构与协议设计见 [DESIGN.md](./DESIGN.md)。
-
 ## 许可
 
 [MIT](./LICENSE)
