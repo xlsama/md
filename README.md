@@ -21,7 +21,8 @@ Edit local Markdown in your browser. One `md` command opens a file or folder: a 
 Requires [Bun](https://bun.sh) ≥ 1.2.
 
 ```bash
-bun add -g @xlsama/md   # or: pnpm add -g @xlsama/md
+bun add -g @xlsama/md        # or: pnpm add -g @xlsama/md
+mise use -g npm:@xlsama/md   # or via mise
 ```
 
 Upgrades (`bun add -g @xlsama/md@latest`) need no manual restart: the next `md` run restarts the daemon and open tabs reconnect automatically.

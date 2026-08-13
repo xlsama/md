@@ -21,7 +21,8 @@
 需要 [Bun](https://bun.sh) ≥ 1.2。
 
 ```bash
-bun add -g @xlsama/md   # 或 pnpm add -g @xlsama/md
+bun add -g @xlsama/md        # 或 pnpm add -g @xlsama/md
+mise use -g npm:@xlsama/md   # 或用 mise
 ```
 
 升级（`bun add -g @xlsama/md@latest`）后无需手动重启：下次运行 `md` 时会自动重启 daemon，已打开的页面自动重连。
