@@ -125,6 +125,28 @@ describe('decideWorkspace', () => {
     });
   });
 
+  test('a focus the workspace no longer has is not opened', () => {
+    // The daemon remembers its focus across restarts, so it outlives the file.
+    expect(decideWorkspace(input({ focus: 'gone.md' }))).toEqual({ kind: 'none' });
+    expect(decideWorkspace(input({ focus: 'gone.md', currentPath: 'index.md' }))).toEqual({
+      kind: 'resync',
+      path: 'index.md',
+    });
+    expect(decideWorkspace(input({ rootChanged: true, focus: 'gone.md' }))).toEqual({
+      kind: 'close',
+    });
+  });
+
+  test('reconnecting to a document that was deleted meanwhile closes it', () => {
+    expect(decideWorkspace(input({ currentPath: 'gone.md' }))).toEqual({ kind: 'close' });
+  });
+
+  test('unsaved edits survive the document disappearing', () => {
+    expect(decideWorkspace(input({ currentPath: 'gone.md', dirty: true }))).toEqual({
+      kind: 'none',
+    });
+  });
+
   test('an empty workspace with nothing open does nothing', () => {
     expect(decideWorkspace(input())).toEqual({ kind: 'none' });
   });

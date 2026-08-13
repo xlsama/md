@@ -170,7 +170,7 @@ Meowdown 是非受控组件：`<MeowdownEditor initialMarkdown={…} handleRef={
 | `POST /api/assets` | multipart 存图，返回 `{ relativePath }` |
 | `GET /raw/*` | 按工作区相对路径回源文件（图片等）。**必须**做 realpath 包含校验防路径穿越 |
 | `GET /ws` | WebSocket upgrade |
-| `GET /*` | 静态服务 `packages/web/dist`（SPA fallback 到 index.html）；dist 不存在时返回提示页「先 pnpm build」 |
+| `GET /*` | 静态服务 `packages/web/dist`（SPA fallback 到 index.html）；dist 不存在时返回提示页「先 pnpm build」。`assets/*` 文件名带内容哈希 → `immutable` 长缓存；index.html → `no-store`，否则升级后浏览器还端着上个版本的壳 |
 
 所有文件操作（含 WS 消息里的 path）解析后必须落在 workspace root 之内，否则拒绝。
 
@@ -246,8 +246,9 @@ Linux / Windows 的运行时行为未在开发机上验证，只保证类型检�
 
 ## 设置系统（2026-08-13 定稿）
 
-- **配置文件**：`~/.config/md/settings.json`（尊重 `$XDG_CONFIG_HOME`，目录自动创建）。扁平 JSON，读取时与默认值合并（缺字段向后兼容），只由 API 写入（外部手改文件 v1 不监听）。
+- **配置文件**：`~/.config/md/settings.json`（尊重 `$XDG_CONFIG_HOME`，目录自动创建）。扁平 JSON，读取时与默认值合并（缺字段向后兼容）。
 - **API**：`GET /api/settings`（默认值合并后的完整配置）+ `PUT /api/settings`（zod 校验、原子写盘）。保存成功后 daemon 广播 `settings` WS 消息，所有页面即时应用。
+- **文件监听**：daemon 监听配置目录（不是文件——原子写用 `rename`，盯文件的 watch 一次就失效），50ms 合并事件后重新读取；内容真变了才广播，所以自己写的那次不会回声。这条让「谁写的都算数」：另一个端口上的 daemon、编辑器、脚本改了文件，所有 daemon 与页面都跟着变，**没有任何设置需要重启才生效**。
 - **配置项 v1**：
   - `theme`: `'system' | 'light' | 'dark'`（默认 system）
   - `format.autocorrect`: boolean（默认 true，服务端保存管线读取）
@@ -259,7 +260,8 @@ Linux / Windows 的运行时行为未在开发机上验证，只保证类型检�
   - `sidebarOpen`: boolean（默认 **false**——首屏侧栏收起、正文居中；TopBar 最左侧 panel-left 按钮切换，静默 PUT 持久化；**不进设置 dialog 表单**，无响应式行为，只认配置）
 - **UI**：
   - 侧栏底部两个 icon 按钮（与上方按钮同款交互）：**主题切换**（太阳/月亮两态切换 light/dark；settings 里选了 system 则按钮从当前系统态起切）与**设置**（打开 dialog）
-  - 设置 dialog：左侧 tabs（外观 / 编辑器）+ 右侧内容；底部固定保存按钮——无变更禁用、有变更可点、保存成功回到禁用；Esc/外部点击关闭（有未保存变更时提示）
+  - 设置 dialog：左侧 tabs（外观 / 编辑器）+ 右侧内容，**没有保存按钮**——改了就写：开关/主题点一下即落盘，输入框停手 400ms 落盘；关闭（左上角 ✕ / Esc / 点外面）会把还没到期的那次立刻写掉。成功不弹 toast（控件自己动了就是回执），失败才弹并把控件退回生效中的值
+  - 半截的输入不写盘：非法字段（空目录名、超范围毫秒数）显示行内错误并**只跳过它自己**，同时改的其它字段照常保存；离开输入框时该字段退回生效值
   - 外观 tab：主题三选（系统/亮/暗）。编辑器 tab：autocorrect 开关、oxfmt 开关、图片目录名、链接卡片开关、自动保存防抖时长
 - daemon 端消费（format 开关、assetsDir）在 PUT 后热生效，无需重启。
 

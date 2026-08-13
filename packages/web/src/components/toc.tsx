@@ -185,7 +185,7 @@ function TocList({ onNavigate }: { onNavigate: () => void }) {
       {toc.length === 0 && (
         <p className="px-2 py-1 text-xs text-[var(--md-muted)]">这篇文档还没有标题</p>
       )}
-      <ul>
+      <ul className="flex flex-col gap-0.5">
         {toc.map((entry) => (
           <li key={`${String(entry.index)}:${entry.text}`} className="min-w-0">
             <TocItem

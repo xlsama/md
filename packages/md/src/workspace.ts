@@ -47,9 +47,13 @@ export class Workspace {
     const scan = await scanTree(realRoot);
     this.tree = scan.tree;
     this.treeSignature = scan.signature;
+    // `focus` comes back from `state.json` across restarts, so it may well name
+    // a file that was deleted in the meantime — and it is broadcast below, where
+    // every page would immediately ask to open it.
+    await this.pruneFocus();
     this.startWatcher();
     if (persist) {
-      await writeState({ lastWorkspace: realRoot, lastFocus: focus }).catch(() => {});
+      await writeState({ lastWorkspace: realRoot, lastFocus: this.focus }).catch(() => {});
     }
     this.broadcast(this.workspaceMessage());
   }
@@ -125,6 +129,10 @@ export class Workspace {
       if (!force && signature === this.treeSignature) return false;
       this.tree = tree;
       this.treeSignature = signature;
+      // The remembered document may be what just disappeared — deleted from a
+      // terminal, renamed by a branch switch. Keeping it would hand it to the
+      // next page that connects, which would ask to open a file that is gone.
+      if (await this.pruneFocus()) await writeState({ lastFocus: null }).catch(() => {});
       this.broadcast({ type: 'tree', tree });
       return true;
     });
@@ -166,6 +174,20 @@ export class Workspace {
   setFocus(rel: string | null): void {
     this.focus = rel;
     void writeState({ lastFocus: rel }).catch(() => {});
+  }
+
+  /**
+   * Drops a remembered document that is not on disk any more. Answers whether
+   * it dropped one, so the caller can decide when that is worth persisting.
+   */
+  private async pruneFocus(): Promise<boolean> {
+    const rel = this.focus;
+    const root = this.root;
+    if (rel === null || root === null) return false;
+    const stat = await fs.stat(path.join(root, rel)).catch(() => null);
+    if (stat?.isFile() === true) return false;
+    this.focus = null;
+    return true;
   }
 
   close(): void {

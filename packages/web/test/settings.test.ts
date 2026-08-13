@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { DEFAULT_SETTINGS, type Settings } from '@xlsama/md/protocol';
 import {
+  committableForm,
   formErrors,
   formPatch,
   hasErrors,
@@ -104,6 +105,29 @@ describe('formErrors', () => {
         `${saveDebounceMs}: ${String(hasErrors(formErrors({ ...toForm(custom), saveDebounceMs })))}`
       ).toBe(`${saveDebounceMs}: false`);
     }
+  });
+});
+
+describe('committableForm', () => {
+  test('a valid form is handed back untouched', () => {
+    const form = { ...toForm(custom), assetsDir: 'img', saveDebounceMs: '900' };
+    expect(committableForm(form, custom)).toBe(form);
+  });
+
+  test('a half-typed field keeps the value that is in effect', () => {
+    expect(committableForm({ ...toForm(custom), assetsDir: '' }, custom).assetsDir).toBe('图片');
+    expect(committableForm({ ...toForm(custom), saveDebounceMs: '1' }, custom).saveDebounceMs).toBe(
+      '800'
+    );
+  });
+
+  test('the fields beside it are still written', () => {
+    const form = { ...toForm(custom), saveDebounceMs: '', oxfmt: false, assetsDir: 'img' };
+    expect(committableForm(form, custom)).toEqual({
+      ...toForm(custom),
+      oxfmt: false,
+      assetsDir: 'img',
+    });
   });
 });
 

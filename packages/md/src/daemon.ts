@@ -14,7 +14,7 @@ import {
   type ClientMessage,
   type ServerMessage,
 } from './protocol.ts';
-import { getSettings, loadSettings, updateSettings } from './settings.ts';
+import { getSettings, loadSettings, updateSettings, watchSettings } from './settings.ts';
 import { LinkMetaCache, LinkTargetError, normalizeLinkUrl, type LinkMetaCacheOptions } from './link-meta.ts';
 import {
   createEntry,
@@ -256,18 +256,31 @@ async function serveWebAsset(dist: string, pathname: string): Promise<Response |
   const rel = pathname.replace(/^\/+/, '');
   if (rel) {
     const candidate = path.resolve(dist, rel);
-    if (candidate === dist || candidate.startsWith(`${dist}${path.sep}`)) {
+    if (
+      candidate.startsWith(`${dist}${path.sep}`) &&
+      // The shell itself must never take this branch — it gets `no-store` below.
+      candidate !== indexPath
+    ) {
       const stat = await fs.stat(candidate).catch(() => null);
       if (stat?.isFile()) {
         const type = contentTypeFor(candidate);
+        // Everything under `assets/` carries a content hash in its name, so the
+        // URL changes whenever the file does; anything else gets no directive.
+        const hashed = candidate.startsWith(path.join(dist, 'assets') + path.sep);
         return new Response(Bun.file(candidate), {
-          headers: type ? { 'content-type': type } : {},
+          headers: {
+            ...(type ? { 'content-type': type } : {}),
+            ...(hashed ? { 'cache-control': 'public, max-age=31536000, immutable' } : {}),
+          },
         });
       }
     }
   }
+  // The shell, on the other hand, keeps its URL forever and names the hashed
+  // bundles — cached, it would keep serving the previous version of the app
+  // after an upgrade until someone hard-reloads.
   return new Response(Bun.file(indexPath), {
-    headers: { 'content-type': 'text/html; charset=utf-8' },
+    headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' },
   });
 }
 
@@ -445,6 +458,13 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<DaemonHa
   // them on start keeps the cache directory from growing without bound.
   void ctx.linkMeta.sweepExpired();
 
+  // Settings changed by anything other than this daemon reach the open pages the
+  // same way our own writes do, so nothing about a settings change ever asks for
+  // a restart — of the daemon or of the browser.
+  const unwatchSettings = watchSettings((settings) => {
+    broadcast({ type: 'settings', settings });
+  });
+
   if (options.writePidFile) await writePid(process.pid).catch(() => {});
 
   const listenPort = server.port ?? 0;
@@ -455,6 +475,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<DaemonHa
     workspace,
     clients: () => clients.size,
     stop: async () => {
+      unwatchSettings();
       workspace.close();
       await server?.stop(true);
       clients.clear();

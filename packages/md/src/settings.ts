@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import { watch, type FSWatcher } from 'node:fs';
 import { DEFAULT_SETTINGS, settingsSchema, type Settings, type SettingsPatch } from './protocol.ts';
 
 /**
@@ -92,4 +93,69 @@ export async function updateSettings(patch: SettingsPatch): Promise<Settings> {
 /** Drops the cached copy; the next read goes back to disk. */
 export function resetSettingsCache(): void {
   cache = null;
+}
+
+/**
+ * Follows the settings file while the daemon runs.
+ *
+ * Without this the in-process copy is only ever refreshed by our own `PUT`, so
+ * anything else that writes the file — a second daemon on another port, an
+ * editor, `md config` — is invisible until a restart. Watching removes the
+ * restart from the picture entirely: whoever writes the file, every daemon
+ * picks it up and every page hears about it.
+ *
+ * The *directory* is watched rather than the file: {@link writeAtomic} replaces
+ * it through `rename`, which detaches a watch on the old inode after the first
+ * write. Events are coalesced because one save arrives as several (the temp
+ * file, the rename), and a re-read that changes nothing is dropped — otherwise
+ * our own writes would echo back out as broadcasts.
+ */
+export function watchSettings(onChange: (settings: Settings) => void): () => void {
+  const file = settingsPath();
+  const dir = path.dirname(file);
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let watcher: FSWatcher | null = null;
+  let closed = false;
+
+  const reload = (): void => {
+    timer = null;
+    const before = JSON.stringify(fromCache());
+    void loadSettings().then(
+      (settings) => {
+        if (closed || JSON.stringify(settings) === before) return;
+        onChange(settings);
+      },
+      () => {}
+    );
+  };
+
+  const start = (): void => {
+    if (closed) return;
+    try {
+      watcher = watch(dir, (_event, name) => {
+        if (name !== null && name !== path.basename(file)) return;
+        if (timer !== null) clearTimeout(timer);
+        timer = setTimeout(reload, 50);
+      });
+      // A config directory that is deleted out from under us takes the watch
+      // with it; the daemon keeps serving the settings it has either way.
+      watcher.on('error', () => {
+        watcher?.close();
+        watcher = null;
+      });
+    } catch {
+      watcher = null;
+    }
+  };
+
+  // The directory is created lazily by the first write, so it may not be there
+  // yet — in which case there is nothing to watch until it is.
+  void fs.mkdir(dir, { recursive: true }).then(start, start);
+
+  return () => {
+    closed = true;
+    if (timer !== null) clearTimeout(timer);
+    watcher?.close();
+    watcher = null;
+  };
 }

@@ -1,15 +1,26 @@
 import type { Theme } from '@xlsama/md/protocol';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { saveSettings } from '../api.ts';
+import { IconButton } from './icon-button.tsx';
 import {
+  committableForm,
   formErrors,
   formPatch,
-  hasErrors,
   isFormDirty,
   toForm,
   type SettingsForm,
 } from '../lib/settings.ts';
 import { useStore } from '../store.ts';
+
+/**
+ * How long a *typed* field waits before it is written.
+ *
+ * Switches and the theme picker do not wait at all — one click is the whole
+ * change. Text and numbers are still being composed while they are being read,
+ * so they settle first; short enough that leaving the dialog straight after
+ * typing feels like it saved on the last keystroke.
+ */
+const COMMIT_DEBOUNCE = 400;
 
 type Tab = 'appearance' | 'editor';
 
@@ -123,44 +134,77 @@ export function SettingsDialog() {
 
   const [tab, setTab] = useState<Tab>('appearance');
   const [form, setForm] = useState<SettingsForm>(() => toForm(settings));
-  const [saving, setSaving] = useState(false);
-  /** Raised by a close attempt that would throw work away. */
-  const [confirming, setConfirming] = useState(false);
+  const commitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * The form as it was last typed, while its write is still pending. Non-null
+   * is also what marks the form as "being edited right now", which is what keeps
+   * a `settings` broadcast from rewriting the field under the cursor.
+   */
+  const editing = useRef<SettingsForm | null>(null);
 
-  // The form is a snapshot taken when the dialog opens: a `settings` broadcast
-  // arriving while it is open (another tab, the theme toggle) must not reach in
-  // and rewrite what the user is editing.
+  const clearTimer = () => {
+    if (commitTimer.current === null) return;
+    clearTimeout(commitTimer.current);
+    commitTimer.current = null;
+  };
+
   useEffect(() => {
     if (!open) return;
     setForm(toForm(useStore.getState().settings));
     setTab('appearance');
-    setConfirming(false);
+    editing.current = null;
+    clearTimer();
   }, [open]);
 
-  const dirty = isFormDirty(form, settings);
-  const errors = formErrors(form);
-  const canSave = dirty && !hasErrors(errors) && !saving;
+  // A change made elsewhere — another tab, the sidebar's theme button, the
+  // settings file itself — is followed live, since there is no longer a local
+  // draft that it could overwrite. Except while one is being typed.
+  useEffect(() => {
+    if (editing.current !== null) return;
+    setForm((current) => (isFormDirty(current, settings) ? toForm(settings) : current));
+  }, [settings]);
 
-  const requestClose = () => {
-    if (dirty) {
-      setConfirming(true);
-      return;
-    }
+  // Unmounting with a keystroke still in the timer would lose it; the dialog is
+  // only ever closed through `close`, but a reload or a route change is not.
+  useEffect(() => clearTimer, []);
+
+  const errors = formErrors(form);
+
+  /**
+   * Writes the form. Called on every change, so it stays quiet when there is
+   * nothing to say: an unchanged form is not sent, and a successful write shows
+   * no toast — the control moving *is* the confirmation.
+   */
+  const commit = (next: SettingsForm): void => {
+    clearTimer();
+    editing.current = null;
+    const current = useStore.getState().settings;
+    const payload = committableForm(next, current);
+    if (!isFormDirty(payload, current)) return;
+    void saveSettings(formPatch(payload))
+      .then((saved) => {
+        setSettings(saved);
+      })
+      .catch((err: unknown) => {
+        pushToast(err instanceof Error ? err.message : '设置保存失败', 'error');
+        // A refused write leaves the control showing something that is not in
+        // effect anywhere, so it goes back to what is.
+        setForm(toForm(useStore.getState().settings));
+      });
+  };
+
+  const close = () => {
+    if (editing.current !== null) commit(editing.current);
     setSettingsOpen(false);
   };
 
-  // Deliberately re-bound on every render: the handler closes over `dirty` and
-  // `confirming`, and a stale copy of either would dismiss unsaved work.
+  // Re-bound on every render so the handler never closes over a stale draft.
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.stopPropagation();
-      if (confirming) {
-        setConfirming(false);
-        return;
-      }
-      requestClose();
+      close();
     };
     window.addEventListener('keydown', onKey);
     return () => {
@@ -170,38 +214,47 @@ export function SettingsDialog() {
 
   if (!open) return null;
 
-  const save = async (): Promise<void> => {
-    setSaving(true);
-    try {
-      const next = await saveSettings(formPatch(form));
-      // The daemon broadcasts this too; applying it here as well is what makes
-      // the button fall back to disabled the instant the write lands.
-      setSettings(next);
-      setForm(toForm(next));
-      pushToast('设置已保存');
-    } catch (err) {
-      pushToast(err instanceof Error ? err.message : '设置保存失败', 'error');
-    } finally {
-      setSaving(false);
-    }
+  /** A switch or a segmented choice: one click is the whole change. */
+  const choose = (patch: Partial<SettingsForm>) => {
+    const next = { ...form, ...patch };
+    setForm(next);
+    commit(next);
   };
 
-  const update = (patch: Partial<SettingsForm>) => {
-    setForm((current) => ({ ...current, ...patch }));
+  /** A typed field: written once it stops changing. */
+  const edit = (patch: Partial<SettingsForm>) => {
+    const next = { ...form, ...patch };
+    setForm(next);
+    editing.current = next;
+    clearTimer();
+    commitTimer.current = setTimeout(() => {
+      commit(next);
+    }, COMMIT_DEBOUNCE);
+  };
+
+  /**
+   * Leaving a field that never became valid. Its half-typed text was never
+   * written, so it is dropped for the value that is actually in effect rather
+   * than left on screen looking like a setting.
+   */
+  const settle = () => {
+    if (editing.current !== null) commit(editing.current);
+    const current = useStore.getState().settings;
+    setForm((draft) => committableForm(draft, current));
   };
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/25 pt-[12vh]"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) requestClose();
+        if (event.target === event.currentTarget) close();
       }}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-label="设置"
-        className="md-fade-in relative flex h-[min(31rem,78vh)] w-[min(40rem,92vw)] flex-col overflow-hidden rounded-2xl border border-[var(--md-border)] bg-[var(--md-panel)] shadow-xl"
+        className="md-fade-in relative flex h-[min(31rem,78vh)] w-[min(40rem,92vw)] overflow-hidden rounded-2xl border border-[var(--md-border)] bg-[var(--md-panel)] shadow-xl"
       >
         <div className="flex min-h-0 flex-1">
           <nav
@@ -209,7 +262,10 @@ export function SettingsDialog() {
             aria-label="设置分类"
             className="flex w-36 shrink-0 flex-col gap-1 border-r border-[var(--md-border)] p-2"
           >
-            <p className="px-2.5 pt-1 pb-2 text-xs font-medium text-[var(--md-muted)]">设置</p>
+            <div className="flex items-center justify-between gap-1 pt-0.5 pr-0.5 pb-1.5 pl-2.5">
+              <p className="text-xs font-medium text-[var(--md-muted)]">设置</p>
+              <IconButton icon="x" label="关闭设置" placement="bottom" onClick={close} />
+            </div>
             {TABS.map((entry) => (
               <button
                 key={entry.id}
@@ -240,7 +296,7 @@ export function SettingsDialog() {
                     value={form.theme}
                     options={THEMES}
                     onChange={(theme) => {
-                      update({ theme });
+                      choose({ theme });
                     }}
                   />
                 }
@@ -255,7 +311,7 @@ export function SettingsDialog() {
                       checked={form.autocorrect}
                       label="autocorrect"
                       onChange={(autocorrect) => {
-                        update({ autocorrect });
+                        choose({ autocorrect });
                       }}
                     />
                   }
@@ -268,7 +324,7 @@ export function SettingsDialog() {
                       checked={form.oxfmt}
                       label="oxfmt"
                       onChange={(oxfmt) => {
-                        update({ oxfmt });
+                        choose({ oxfmt });
                       }}
                     />
                   }
@@ -284,8 +340,9 @@ export function SettingsDialog() {
                       spellCheck={false}
                       aria-label="图片目录名"
                       onChange={(event) => {
-                        update({ assetsDir: event.target.value });
+                        edit({ assetsDir: event.target.value });
                       }}
+                      onBlur={settle}
                       className={inputClass}
                     />
                   }
@@ -298,7 +355,7 @@ export function SettingsDialog() {
                       checked={form.linkEmbeds}
                       label="链接卡片"
                       onChange={(linkEmbeds) => {
-                        update({ linkEmbeds });
+                        choose({ linkEmbeds });
                       }}
                     />
                   }
@@ -316,8 +373,9 @@ export function SettingsDialog() {
                       value={form.saveDebounceMs}
                       aria-label="自动保存延迟"
                       onChange={(event) => {
-                        update({ saveDebounceMs: event.target.value });
+                        edit({ saveDebounceMs: event.target.value });
                       }}
+                      onBlur={settle}
                       className={inputClass}
                     />
                   }
@@ -326,56 +384,6 @@ export function SettingsDialog() {
             )}
           </div>
         </div>
-
-        <footer className="flex shrink-0 items-center justify-end gap-2 border-t border-[var(--md-border)] px-4 py-3">
-          <button
-            type="button"
-            onClick={requestClose}
-            className="cursor-pointer rounded-lg px-3 py-1.5 text-xs ring-1 ring-[var(--md-border)] transition-colors hover:bg-[var(--md-hover)]"
-          >
-            关闭
-          </button>
-          <button
-            type="button"
-            disabled={!canSave}
-            onClick={() => {
-              void save();
-            }}
-            className="cursor-pointer rounded-lg bg-[var(--md-accent)] px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {saving ? '保存中…' : '保存'}
-          </button>
-        </footer>
-
-        {confirming && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/30">
-            <div className="md-fade-in w-[min(20rem,84%)] rounded-xl border border-[var(--md-menu-border)] bg-[var(--md-menu-bg)] p-4 shadow-xl">
-              <h2 className="text-sm font-medium">还有未保存的更改</h2>
-              <p className="mt-1 text-xs text-[var(--md-muted)]">关闭会丢弃这些更改。</p>
-              <div className="mt-4 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setConfirming(false);
-                  }}
-                  className="cursor-pointer rounded-lg px-3 py-1.5 text-xs ring-1 ring-[var(--md-border)] transition-colors hover:bg-[var(--md-hover)]"
-                >
-                  继续编辑
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setConfirming(false);
-                    setSettingsOpen(false);
-                  }}
-                  className="cursor-pointer rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
-                >
-                  放弃更改
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

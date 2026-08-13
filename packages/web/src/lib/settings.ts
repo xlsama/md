@@ -77,6 +77,27 @@ export function hasErrors(errors: FormErrors): boolean {
   return Object.keys(errors).length > 0;
 }
 
+/**
+ * The part of the form that may be written right now.
+ *
+ * The dialog saves as you type, so it constantly holds values that are on their
+ * way to being valid — an empty folder name mid-retype, a `1` that is going to
+ * become `1000`. Those fields fall back to what is already in effect instead of
+ * blocking the fields beside them: flipping a switch still lands immediately
+ * while a number is half-typed.
+ */
+export function committableForm(form: SettingsForm, settings: Settings): SettingsForm {
+  const errors = formErrors(form);
+  if (!hasErrors(errors)) return form;
+  const saved = toForm(settings);
+  return {
+    ...form,
+    assetsDir: errors.assetsDir === undefined ? form.assetsDir : saved.assetsDir,
+    saveDebounceMs:
+      errors.saveDebounceMs === undefined ? form.saveDebounceMs : saved.saveDebounceMs,
+  };
+}
+
 /** Whether anything the form owns differs from the settings it was opened with. */
 export function isFormDirty(form: SettingsForm, settings: Settings): boolean {
   const saved = toForm(settings);

@@ -108,6 +108,12 @@ export interface WorkspaceInput {
  * - **reconnect** — the same root comes back; the open document is re-requested
  *   so it picks up whatever changed while the socket was down, unless it holds
  *   edits that have not been saved yet.
+ *
+ * Every path is checked against the tree that arrived with the message, whether
+ * it came from the URL, from the daemon's memory or from the editor. All three
+ * can name a file that is no longer there — the daemon remembers a focus across
+ * restarts, and a document can be deleted from a terminal while the socket is
+ * down — and asking for one is answered with an `ENOENT` in a toast.
  */
 export function decideWorkspace(input: WorkspaceInput): WorkspaceAction {
   const { rootChanged, urlFile, focus, currentPath, dirty, exists } = input;
@@ -115,8 +121,13 @@ export function decideWorkspace(input: WorkspaceInput): WorkspaceAction {
   if (!rootChanged && urlFile !== null && urlFile !== currentPath && exists(urlFile)) {
     return { kind: 'open', path: urlFile };
   }
-  if (focus !== null && focus !== '') return { kind: 'open', path: focus };
+  if (focus !== null && focus !== '' && exists(focus)) return { kind: 'open', path: focus };
   if (rootChanged) return { kind: 'close' };
-  if (currentPath !== null && !dirty) return { kind: 'resync', path: currentPath };
+  // Unsaved edits are the exception: the editor holds the only copy, so a
+  // document that went missing under it stays on screen — `onWorkspace` flushes
+  // it right after, which writes the file back.
+  if (currentPath !== null && !dirty) {
+    return exists(currentPath) ? { kind: 'resync', path: currentPath } : { kind: 'close' };
+  }
   return { kind: 'none' };
 }

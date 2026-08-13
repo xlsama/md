@@ -533,6 +533,49 @@ describe('workspace switching', () => {
   });
 });
 
+describe('a remembered document that is gone', () => {
+  test('is dropped on start rather than handed to the page', async () => {
+    const dir = path.join(ROOT, 'focus-start');
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, 'kept.md'), '# kept\n', 'utf8');
+
+    // What a restart looks like: `state.json` still names the document that was
+    // open last time, and it was deleted in between.
+    const other = await startDaemon({ root: dir, focus: 'deleted.md', persistState: false, port: 0 });
+    try {
+      const page = await Client.connect(other.port);
+      expect((await page.waitFor('workspace')).focus).toBeNull();
+      page.close();
+      await Bun.sleep(50);
+    } finally {
+      await other.stop();
+    }
+  });
+
+  test('is forgotten as soon as it disappears', async () => {
+    const dir = path.join(ROOT, 'focus-live');
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, 'doomed.md'), '# doomed\n', 'utf8');
+
+    const other = await startDaemon({ root: dir, focus: 'doomed.md', persistState: false, port: 0 });
+    try {
+      const page = await Client.connect(other.port);
+      expect((await page.waitFor('workspace')).focus).toBe('doomed.md');
+
+      await fs.rm(path.join(dir, 'doomed.md'));
+      await page.waitFor('tree');
+
+      const second = await Client.connect(other.port);
+      expect((await second.waitFor('workspace')).focus).toBeNull();
+      page.close();
+      second.close();
+      await Bun.sleep(50);
+    } finally {
+      await other.stop();
+    }
+  });
+});
+
 describe('save races an external write', () => {
   const RACE = path.join(ROOT, 'race');
   const FILE = 'race.md';
@@ -820,6 +863,28 @@ describe('settings', () => {
     expect(msg.settings.theme).toBe('dark');
     other.close();
     await Bun.sleep(50);
+  });
+
+  test('a file written by someone else is picked up and broadcast, no restart', async () => {
+    client.drain();
+    const before = await get();
+    const outside: Settings = { ...before, saveDebounceMs: 1234, assetsDir: 'outside' };
+    await fs.writeFile(settingsPath(), `${JSON.stringify(outside, null, 2)}\n`, 'utf8');
+
+    const broadcast = await client.waitFor('settings');
+    expect(broadcast.settings).toEqual(outside);
+    // The daemon's own copy moved with it — this is what the save pipeline and
+    // the asset upload read.
+    expect(await get()).toEqual(outside);
+  });
+
+  test('our own write does not echo back a second time', async () => {
+    const res = await put({ assetsDir: 'assets' });
+    expect(res.status).toBe(200);
+    await client.waitFor('settings');
+    // The watcher sees the write too; re-reading it changes nothing, so it says
+    // nothing.
+    await client.expectNone('settings', 300);
   });
 
   test('illegal values are refused and change nothing', async () => {
