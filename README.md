@@ -14,18 +14,20 @@ Edit local Markdown in your browser. One `md` command opens a file or folder: a 
 - Co-edit with AI agents: external changes sync in live
 - Link cards: a YouTube, X, or website URL on its own line renders as a player, tweet card, or site card — the markdown stays a plain URL
 - File tree with inline create/rename, fuzzy filename filter, outline, wikilinks, image paste, settings panel, light & dark themes
-- Start at login: `md service install` (macOS launchd)
+- Start at login: `md service install` (launchd / systemd / Task Scheduler)
 
 ## Install
 
-Requires [Bun](https://bun.sh) ≥ 1.2.
+No runtime to install — every release ships a self-contained binary.
 
 ```bash
-bun add -g @xlsama/md        # or: pnpm add -g @xlsama/md
+npm i -g @xlsama/md          # or: pnpm add -g / bun add -g
 mise use -g npm:@xlsama/md   # or via mise
 ```
 
-Upgrades (`bun add -g @xlsama/md@latest`) need no manual restart: the next `md` run restarts the daemon and open tabs reconnect automatically.
+Prebuilt binaries for macOS (arm64/x64), Linux (x64/arm64) and Windows (x64) are also attached to each [release](https://github.com/xlsama/md/releases).
+
+Upgrades (`npm i -g @xlsama/md@latest`) need no manual restart: the next `md` run restarts the daemon and open tabs reconnect automatically.
 
 ## Usage
 
@@ -33,7 +35,7 @@ Upgrades (`bun add -g @xlsama/md@latest`) need no manual restart: the next `md` 
 md notes.md          # open a file; its folder becomes the workspace
 md ~/notes           # open a directory
 md                   # reopen the last workspace
-md service install   # start at login (launchd)
+md service install   # start at login
 md service uninstall
 ```
 

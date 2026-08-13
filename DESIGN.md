@@ -213,9 +213,10 @@ launchd plist：Label `dev.md.daemon`，`ProgramArguments` 用绝对路径（`pr
 ## 发布与开源
 
 - npm 包名 **`@xlsama/md`**（发布 packages/md 单包；`bin` 仍是 `md`），GitHub `xlsama/md`，public，MIT LICENSE。无 scope 的 `writedown` 被 npm 以「与 `write-down` 过于相似」拒绝，故走 scope。
-- 运行时要求 Bun（bin shebang `#!/usr/bin/env bun`），README 写明 `bun` 为前置依赖，安装方式 `bun add -g @xlsama/md` / `pnpm add -g @xlsama/md`。
-- 前端产物随包分发：`prepublishOnly` 构建 `@md/web` 并把 `dist` 拷入 `packages/md/web-dist/`，daemon 静态目录解析顺序：包内 `web-dist` → 仓库 `packages/web/dist`（开发态）。`files` 白名单：`src`、`web-dist`。
-- 版本与发版：root `release` 脚本用 `bumpp`（升级版本 + 自动打 tag），root 维护 `CHANGELOG.md`。
+- **终端用户不需要 Bun**：npm 分发采用 esbuild 布局——主包 `@xlsama/md` 只放一个 Node 写的 shim（`npm/md.cjs`，`bin` 指向它），二进制拆进 `@xlsama/md-<platform>-<arch>` 子包，各自用 `os`/`cpu` 限定，主包通过 `optionalDependencies` 声明，npm 只装匹配当前平台的那一个。shim 用 `require.resolve` 找到二进制并转发 argv，找不到时打印可操作的提示并退出 1。
+- **`optionalDependencies` 不入库**：平台包只在发版后才存在于 registry，写进仓库会搅动 lockfile 并让每个贡献者白下载一个二进制。改由 `scripts/inject-optional-deps.ts` 在发布前从实际打包出的平台包目录反推写入，因此主包只可能依赖本次发布真正产出的二进制。
+- 主包 `files` 白名单：`npm`、`src`（`src` 保留是因为 `exports` 仍供 workspace 内的 web 侧 `@xlsama/md/protocol` 使用）。前端产物不再随主包分发，改为嵌进二进制。
+- 版本与发版：root `release` 脚本用 `bumpp`（升级版本 + 自动打 tag），root 维护 `CHANGELOG.md`。推 `v*` tag 触发 `.github/workflows/release.yml`：5 个平台各自原生构建 → 上传 artifact → 先发平台子包、再发主包（顺序不能反，否则主包的 optionalDependencies 短暂指向不存在的版本）→ 建 GitHub Release。artifact 上传会丢 Unix 权限位，发布前必须重新 `chmod +x`。
 - README 简短中英双语；`@md/server` 包更名为 `@xlsama/md`（web 侧 import 同步改 `@xlsama/md/protocol`）。
 
 ## 单文件二进制分发（2026-08-13 定稿）

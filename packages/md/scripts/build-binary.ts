@@ -39,5 +39,8 @@ const proc = Bun.spawn({ cmd, cwd: PKG_ROOT, stdout: 'inherit', stderr: 'inherit
 const code = await proc.exited;
 if (code !== 0) process.exit(code);
 
-const built = Bun.file(target?.includes('windows') ? `${outfile}.exe` : outfile);
-console.log(`${path.relative(PKG_ROOT, outfile)}  ${(built.size / 1024 / 1024).toFixed(1)} MB`);
+// Bun appends `.exe` for windows targets, including when the host is windows and
+// no explicit --target was passed.
+const windows = target ? target.includes('windows') : process.platform === 'win32';
+const produced = windows && !outfile.endsWith('.exe') ? `${outfile}.exe` : outfile;
+console.log(`${path.relative(PKG_ROOT, produced)}  ${(Bun.file(produced).size / 1024 / 1024).toFixed(1)} MB`);

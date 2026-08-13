@@ -14,18 +14,20 @@
 - 与 AI agent 共同编辑：外部改动实时同步
 - 链接卡片：独占段落的 YouTube、X 或网站链接渲染为播放器、推文卡或站点卡片，文件中仍是纯 URL
 - 文件树内联新建与重命名、文件名模糊过滤、大纲、wikilink、图片粘贴、设置面板、亮暗主题
-- 开机自启：`md service install`（macOS launchd）
+- 开机自启：`md service install`（launchd / systemd / 计划任务）
 
 ## 安装
 
-需要 [Bun](https://bun.sh) ≥ 1.2。
+无需安装运行时，每个版本都提供自包含的二进制。
 
 ```bash
-bun add -g @xlsama/md        # 或 pnpm add -g @xlsama/md
+npm i -g @xlsama/md          # 或 pnpm add -g / bun add -g
 mise use -g npm:@xlsama/md   # 或用 mise
 ```
 
-升级（`bun add -g @xlsama/md@latest`）后无需手动重启：下次运行 `md` 时会自动重启 daemon，已打开的页面自动重连。
+macOS（arm64/x64）、Linux（x64/arm64）、Windows（x64）的预编译二进制也附在每个 [release](https://github.com/xlsama/md/releases) 里。
+
+升级（`npm i -g @xlsama/md@latest`）后无需手动重启：下次运行 `md` 时会自动重启 daemon，已打开的页面自动重连。
 
 ## 使用
 
@@ -33,7 +35,7 @@ mise use -g npm:@xlsama/md   # 或用 mise
 md notes.md          # 打开文件，其父目录作为工作区
 md ~/notes           # 打开目录
 md                   # 恢复上次工作区
-md service install   # 开机自启（launchd）
+md service install   # 开机自启
 md service uninstall # 取消开机自启
 ```
 

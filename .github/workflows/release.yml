@@ -1,0 +1,133 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    # Native modules (autocorrect-node, oxfmt) are NAPI addons and only the host
+    # platform's .node exists in node_modules, so `bun build --compile --target=…`
+    # would embed the wrong binary. Every platform must build on its own runner.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: darwin-arm64
+            runner: macos-latest
+          - platform: darwin-x64
+            runner: macos-13
+          - platform: linux-x64
+            runner: ubuntu-latest
+          - platform: linux-arm64
+            runner: ubuntu-24.04-arm
+          - platform: win32-x64
+            runner: windows-latest
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      - name: Build binary
+        working-directory: packages/md
+        run: bun run build:binary
+
+      - name: Pack npm package
+        working-directory: packages/md
+        run: bun run pack:npm --platform=${{ matrix.platform }}
+
+      - name: Archive binary
+        working-directory: packages/md/npm-packages/md-${{ matrix.platform }}/bin
+        shell: bash
+        run: |
+          if [ "${{ matrix.platform }}" = "win32-x64" ]; then
+            7z a "$GITHUB_WORKSPACE/md-${{ matrix.platform }}.zip" md.exe
+          else
+            tar -czf "$GITHUB_WORKSPACE/md-${{ matrix.platform }}.tar.gz" md
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-${{ matrix.platform }}
+          path: packages/md/npm-packages/md-${{ matrix.platform }}
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: archive-${{ matrix.platform }}
+          path: md-${{ matrix.platform }}.*
+          retention-days: 1
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: npm-*
+          path: npm-packages
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: archive-*
+          path: archives
+          merge-multiple: true
+
+      # Uploading an artifact drops the Unix mode bits, so the binary would ship
+      # non-executable if published as downloaded.
+      - name: Restore executable bit
+        run: find npm-packages -name md -type f -exec chmod +x {} +
+
+      # Platform packages first: the main package's optionalDependencies pin these
+      # exact versions, so publishing it first would leave installs briefly broken.
+      - name: Publish platform packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          for dir in npm-packages/npm-*/; do
+            echo "publishing $dir"
+            npm publish "$dir" --access public
+          done
+
+      - run: pnpm install --frozen-lockfile
+
+      # optionalDependencies are not committed (see inject-optional-deps.ts); they
+      # are derived here from the platform packages this release actually built.
+      - name: Inject optionalDependencies
+        working-directory: packages/md
+        run: bun run inject:optional-deps --dir=$GITHUB_WORKSPACE/npm-packages
+
+      - name: Publish main package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm --filter @xlsama/md publish --access public --no-git-checks
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" archives/* --generate-notes
