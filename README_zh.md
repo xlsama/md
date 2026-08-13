@@ -10,7 +10,7 @@
 
 - 即开即用：`md file.md` 或 `md dir`，daemon 未启动时自动拉起
 - 所见即所得：[Meowdown](https://github.com/prosekit/meowdown) 混合渲染，语法只在光标处露出
-- 保存即格式化：[autocorrect](https://github.com/huacnlee/autocorrect) 处理中英文空格，[oxfmt](https://github.com/oxc-project/oxfmt) 负责排版，回灌不打断输入
+- 保存即格式化：[autocorrect](https://github.com/huacnlee/autocorrect) 处理中英文空格，[oxfmt](https://oxc.rs/docs/guide/usage/formatter) 负责排版，回灌不打断输入
 - 与 AI agent 共同编辑：外部改动实时同步
 - 链接卡片：独占段落的 YouTube、X 或网站链接渲染为播放器、推文卡或站点卡片，文件中仍是纯 URL
 - 文件树内联新建与重命名、文件名模糊过滤、大纲、wikilink、图片粘贴、设置面板、亮暗主题
