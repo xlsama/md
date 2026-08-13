@@ -21,10 +21,10 @@
 需要 [Bun](https://bun.sh) ≥ 1.2。
 
 ```bash
-bun add -g writedown   # 或 pnpm add -g writedown
+bun add -g @xlsama/md   # 或 pnpm add -g @xlsama/md
 ```
 
-升级（`bun add -g writedown@latest`）后无需手动重启：下次运行 `md` 时会自动重启 daemon，已打开的页面自动重连。
+升级（`bun add -g @xlsama/md@latest`）后无需手动重启：下次运行 `md` 时会自动重启 daemon，已打开的页面自动重连。
 
 ## 使用
 

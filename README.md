@@ -21,10 +21,10 @@ Edit local Markdown in your browser. One `md` command opens a file or folder: a 
 Requires [Bun](https://bun.sh) ≥ 1.2.
 
 ```bash
-bun add -g writedown   # or: pnpm add -g writedown
+bun add -g @xlsama/md   # or: pnpm add -g @xlsama/md
 ```
 
-Upgrades (`bun add -g writedown@latest`) need no manual restart: the next `md` run restarts the daemon and open tabs reconnect automatically.
+Upgrades (`bun add -g @xlsama/md@latest`) need no manual restart: the next `md` run restarts the daemon and open tabs reconnect automatically.
 
 ## Usage
 

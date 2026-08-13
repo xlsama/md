@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from 'writedown/protocol';
+import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from '@xlsama/md/protocol';
 import { dragSidebar, SIDEBAR_COLLAPSE_WIDTH, sidebarShown } from '../src/lib/sidebar.ts';
 
 describe('dragSidebar', () => {

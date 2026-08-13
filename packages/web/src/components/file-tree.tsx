@@ -8,7 +8,7 @@ import type {
 import { FileTree, useFileTree } from '@pierre/trees/react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from 'writedown/protocol';
+import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from '@xlsama/md/protocol';
 import { basename, dirname, isMarkdown, withMarkdownExtension } from '../lib/paths.ts';
 import {
   dragSidebar,

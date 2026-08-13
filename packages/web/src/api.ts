@@ -6,7 +6,7 @@ import {
   type HealthResponse,
   type Settings,
   type SettingsPatch,
-} from 'writedown/protocol';
+} from '@xlsama/md/protocol';
 import { z } from 'zod';
 
 /**

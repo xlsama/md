@@ -1,4 +1,4 @@
-import { linkMetaResponseSchema, type LinkMeta } from 'writedown/protocol';
+import { linkMetaResponseSchema, type LinkMeta } from '@xlsama/md/protocol';
 
 /**
  * Module-level store for `/api/link-meta` answers.

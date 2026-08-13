@@ -7,7 +7,7 @@ const DAEMON = `http://127.0.0.1:${process.env.MD_PORT ?? '2233'}`;
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   optimizeDeps: {
-    exclude: ['writedown'],
+    exclude: ['@xlsama/md'],
   },
   server: {
     proxy: {

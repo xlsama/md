@@ -59,7 +59,7 @@ md/
 │   │       ├── state.ts       # ~/.local/state/md/（state.json、daemon.log、pid）
 │   │       ├── settings.ts    # ~/.config/writedown/settings.json 读写
 │   │       ├── link-meta.ts   # /api/link-meta：抓取 + SSRF 防护 + 内存/磁盘两级缓存
-│   │       └── protocol.ts    # 全部 Zod schema + TS 类型（web 通过 writedown/protocol 导入）
+│   │       └── protocol.ts    # 全部 Zod schema + TS 类型（web 通过 @xlsama/md/protocol 导入）
 │   └── web/
 │       ├── package.json
 │       ├── vite.config.ts     # dev 时 /api /ws /raw 代理到 daemon
@@ -212,11 +212,11 @@ launchd plist：Label `dev.md.daemon`，`ProgramArguments` 用绝对路径（`pr
 
 ## 发布与开源
 
-- npm 包名 **`writedown`**（发布 packages/md 单包；`bin` 仍是 `md`），GitHub `xlsama/writedown`，public，MIT LICENSE。
-- 运行时要求 Bun（bin shebang `#!/usr/bin/env bun`），README 写明 `bun` 为前置依赖，安装方式 `bun add -g writedown` / `pnpm add -g writedown`。
+- npm 包名 **`@xlsama/md`**（发布 packages/md 单包；`bin` 仍是 `md`），GitHub `xlsama/writedown`，public，MIT LICENSE。无 scope 的 `writedown` 被 npm 以「与 `write-down` 过于相似」拒绝，故走 scope。
+- 运行时要求 Bun（bin shebang `#!/usr/bin/env bun`），README 写明 `bun` 为前置依赖，安装方式 `bun add -g @xlsama/md` / `pnpm add -g @xlsama/md`。
 - 前端产物随包分发：`prepublishOnly` 构建 `@md/web` 并把 `dist` 拷入 `packages/md/web-dist/`，daemon 静态目录解析顺序：包内 `web-dist` → 仓库 `packages/web/dist`（开发态）。`files` 白名单：`src`、`web-dist`。
 - 版本与发版：root `release` 脚本用 `bumpp`（升级版本 + 自动打 tag），root 维护 `CHANGELOG.md`。
-- README 简短中英双语；`@md/server` 包更名为 `writedown`（web 侧 import 同步改 `writedown/protocol`）。
+- README 简短中英双语；`@md/server` 包更名为 `@xlsama/md`（web 侧 import 同步改 `@xlsama/md/protocol`）。
 
 ## 块级链接富展示（embed + 站点卡片，2026-08-13 定稿）
 

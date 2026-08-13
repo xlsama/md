@@ -1,4 +1,4 @@
-import type { TreeNode } from 'writedown/protocol';
+import type { TreeNode } from '@xlsama/md/protocol';
 import { describe, expect, test } from 'bun:test';
 import {
   collectDirs,

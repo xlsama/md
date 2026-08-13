@@ -1,4 +1,4 @@
-import type { Settings, SettingsPatch, TreeNode } from 'writedown/protocol';
+import type { Settings, SettingsPatch, TreeNode } from '@xlsama/md/protocol';
 import { create } from 'zustand';
 import { saveSettings } from './api.ts';
 import { markdownFiles, toTreePaths } from './lib/tree.ts';

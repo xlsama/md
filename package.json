@@ -5,12 +5,12 @@
   "scripts": {
     "dev": "pnpm -r --parallel dev",
     "build": "pnpm --filter @md/web build",
-    "start": "pnpm --filter writedown start",
+    "start": "pnpm --filter @xlsama/md start",
     "test": "pnpm -r test",
     "lint": "oxlint --fix",
     "release": "bumpp -r",
-    "publish": "pnpm --filter writedown publish --access public",
-    "publish:dry-run": "pnpm --filter writedown publish --access public --dry-run"
+    "publish": "pnpm --filter @xlsama/md publish --access public",
+    "publish:dry-run": "pnpm --filter @xlsama/md publish --access public --dry-run"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",

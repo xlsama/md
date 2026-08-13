@@ -7,7 +7,7 @@ import {
   type Settings,
   type SettingsPatch,
   type Theme,
-} from 'writedown/protocol';
+} from '@xlsama/md/protocol';
 
 /**
  * The daemon is the only owner of the settings, but it is a WebSocket round

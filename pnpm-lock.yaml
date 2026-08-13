@@ -83,6 +83,9 @@ importers:
       '@tanstack/react-router':
         specifier: ^1.170.27
         version: 1.170.27(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@xlsama/md':
+        specifier: workspace:*
+        version: link:../md
       fuzzysort:
         specifier: ^4.0.1
         version: 4.0.1
@@ -98,9 +101,6 @@ importers:
       shiki:
         specifier: ^4.4.3
         version: 4.4.3
-      writedown:
-        specifier: workspace:*
-        version: link:../md
       zod:
         specifier: ^4.4.3
         version: 4.4.3

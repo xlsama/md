@@ -1,4 +1,4 @@
-import type { ClientMessage, ServerMessage, TreeNode } from 'writedown/protocol';
+import type { ClientMessage, ServerMessage, TreeNode } from '@xlsama/md/protocol';
 import type { EditorHandle } from '@meowdown/react';
 import { extractToc, sameToc } from './lib/toc.ts';
 import { decideWorkspace, type RouteBridge } from './lib/route.ts';

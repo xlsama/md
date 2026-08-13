@@ -1,4 +1,4 @@
-import type { TreeNode } from 'writedown/protocol';
+import type { TreeNode } from '@xlsama/md/protocol';
 import { basename, isMarkdown, stripExtension } from './paths.ts';
 
 /**

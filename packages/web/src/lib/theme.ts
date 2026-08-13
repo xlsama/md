@@ -1,4 +1,4 @@
-import type { Theme } from 'writedown/protocol';
+import type { Theme } from '@xlsama/md/protocol';
 
 export type ResolvedTheme = 'light' | 'dark';
 

@@ -1,4 +1,4 @@
-import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from 'writedown/protocol';
+import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from '@xlsama/md/protocol';
 
 /**
  * Below this the window has no room for a tree *and* a readable text column,
