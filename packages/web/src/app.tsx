@@ -8,7 +8,7 @@ import { Sidebar } from './components/file-tree.tsx';
 import { Icon } from './components/icon.tsx';
 import { SettingsDialog } from './components/settings-dialog.tsx';
 import { Toasts } from './components/toasts.tsx';
-import { Toc, useTocView } from './components/toc.tsx';
+import { Toc, useTocDocked } from './components/toc.tsx';
 import { TopBar } from './components/top-bar.tsx';
 import { readFileParam } from './lib/route.ts';
 import { session } from './session.ts';
@@ -146,7 +146,7 @@ function shellStyle(tocDocked: boolean): CSSProperties {
 
 export function App() {
   const root = useStore((s) => s.root);
-  const tocView = useTocView();
+  const tocDocked = useTocDocked();
   useFileParam();
   useConnection();
   useWatcherWarning();
@@ -159,7 +159,7 @@ export function App() {
       ) : (
         <>
           <TopBar />
-          <div className="flex min-h-0 flex-1" style={shellStyle(tocView === 'docked')}>
+          <div className="flex min-h-0 flex-1" style={shellStyle(tocDocked)}>
             <Sidebar />
             {/* The editor column runs to the right edge of the window: its
                 scrollbar is the one the reader reaches for. The outline floats

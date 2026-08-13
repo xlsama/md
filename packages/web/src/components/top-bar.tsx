@@ -1,5 +1,6 @@
 import { basename } from '../lib/paths.ts';
 import { useStore, writeSettings } from '../store.ts';
+import { useSidebarShown } from './file-tree.tsx';
 import { IconButton } from './icon-button.tsx';
 
 export function TopBar() {
@@ -7,7 +8,11 @@ export function TopBar() {
   const readOnly = useStore((s) => s.readOnly);
   const toggleReadOnly = useStore((s) => s.toggleReadOnly);
   const connected = useStore((s) => s.connected);
-  const sidebarOpen = useStore((s) => s.settings.sidebarOpen);
+  const narrow = useStore((s) => s.sidebarNarrow);
+  const setSidebarOverride = useStore((s) => s.setSidebarOverride);
+  // What the button reports is what is on screen, which on a narrow window is
+  // not the same as what the settings say.
+  const sidebarOpen = useSidebarShown();
 
   return (
     <header className="flex h-11 shrink-0 items-center gap-2 border-b border-[var(--md-border)] px-3">
@@ -17,7 +22,11 @@ export function TopBar() {
         tooltip={false}
         pressed={sidebarOpen}
         onClick={() => {
-          writeSettings({ sidebarOpen: !sidebarOpen });
+          const next = !sidebarOpen;
+          writeSettings({ sidebarOpen: next });
+          // Asking for the tree on a window that folded it away is an answer to
+          // that, and it stands until the window crosses the breakpoint again.
+          if (narrow) setSidebarOverride(next);
         }}
       />
 

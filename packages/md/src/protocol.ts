@@ -102,8 +102,20 @@ export function isAssetsDirName(value: string): boolean {
   return !/[/\\\0]/.test(value);
 }
 
+/**
+ * How wide the file tree may be dragged, in CSS pixels.
+ *
+ * The floor is where a nested file name stops being readable at all; below it
+ * the drag collapses the panel instead of narrowing it further. The ceiling
+ * keeps the tree from eating the document on a laptop screen.
+ */
+export const SIDEBAR_MIN_WIDTH = 180;
+export const SIDEBAR_MAX_WIDTH = 480;
+export const SIDEBAR_DEFAULT_WIDTH = 256;
+
 const assetsDirSchema = z.string().refine(isAssetsDirName, '图片目录名必须是单段合法目录名');
 const saveDebounceMsSchema = z.number().int().min(SAVE_DEBOUNCE_MIN).max(SAVE_DEBOUNCE_MAX);
+const sidebarWidthSchema = z.number().int().min(SIDEBAR_MIN_WIDTH).max(SIDEBAR_MAX_WIDTH);
 
 /**
  * The settings file as it is *read*: every field falls back to its default, so
@@ -130,6 +142,8 @@ export const settingsSchema = z.object({
    * dialog.
    */
   sidebarOpen: z.boolean().catch(false),
+  /** UI state as well: where the reader last left the tree's edge. */
+  sidebarWidth: sidebarWidthSchema.catch(SIDEBAR_DEFAULT_WIDTH),
 });
 
 export type Settings = z.infer<typeof settingsSchema>;
@@ -149,6 +163,7 @@ export const settingsPatchSchema = z.object({
   linkEmbeds: z.boolean().optional(),
   saveDebounceMs: saveDebounceMsSchema.optional(),
   sidebarOpen: z.boolean().optional(),
+  sidebarWidth: sidebarWidthSchema.optional(),
 });
 
 export type SettingsPatch = z.infer<typeof settingsPatchSchema>;

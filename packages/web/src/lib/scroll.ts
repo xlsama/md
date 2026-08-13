@@ -75,7 +75,7 @@ export function tweenScrollTop(
   return from + (to - from) * easeOut(Math.max(elapsed, 0) / duration);
 }
 
-function reducedMotion(): boolean {
+export function reducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 

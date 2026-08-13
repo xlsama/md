@@ -1,3 +1,5 @@
+import { JUMP_GUTTER, type ScrollBox } from './scroll.ts';
+
 export interface TocEntry {
   /** Heading level, 1-6. */
   level: number;
@@ -70,6 +72,37 @@ export function extractToc(markdown: string): TocEntry[] {
   }
 
   return entries;
+}
+
+/**
+ * Where the reading line sits below the top of the viewport. A heading counts
+ * as reached once it crosses that line — slightly below where an outline jump
+ * parks it, so the heading you just jumped to is the one that lights up.
+ */
+const READING_LINE = JUMP_GUTTER + 8;
+
+/**
+ * Which heading the reader is under, given each heading's offset from the top
+ * of the document.
+ *
+ * The last heading to have crossed the reading line wins. Above the first one
+ * the answer is still that first heading, so the outline is never left without
+ * a mark; at the very bottom it is the last, which a final section shorter than
+ * the viewport would otherwise never claim. `-1` only for a document with no
+ * headings at all.
+ */
+export function activeHeading(tops: readonly number[], box: ScrollBox): number {
+  if (tops.length === 0) return -1;
+  const max = box.scrollHeight - box.clientHeight;
+  if (max > 1 && box.scrollTop >= max - 1) return tops.length - 1;
+
+  const line = box.scrollTop + READING_LINE;
+  let active = 0;
+  for (let i = 0; i < tops.length; i++) {
+    if ((tops[i] ?? 0) > line) break;
+    active = i;
+  }
+  return active;
 }
 
 /** Cheap equality check so the store can skip no-op TOC updates. */

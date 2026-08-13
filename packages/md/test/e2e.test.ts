@@ -765,6 +765,7 @@ describe('settings', () => {
       linkEmbeds: true,
       saveDebounceMs: 500,
       sidebarOpen: false,
+      sidebarWidth: 256,
     });
   });
 

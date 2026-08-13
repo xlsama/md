@@ -28,14 +28,18 @@ export function tocPrefValue(pref: TocPref): string | null {
   return pref.manual ? (pref.open ? '1' : '0') : null;
 }
 
-/** Auto mode follows the viewport; manual mode ignores it. */
-export function resolveTocOpen(pref: TocPref, wide: boolean): boolean {
-  return pref.manual ? pref.open : wide;
-}
-
-export function tocView(open: boolean, wide: boolean): TocView {
-  if (!open) return 'collapsed';
-  return wide ? 'docked' : 'popover';
+/**
+ * Which of the three presentations the outline is in.
+ *
+ * A wide viewport has room to dock the panel beside the text, and the stored
+ * preference says whether it is showing. A narrow one has not: there the
+ * outline hangs off its button for as long as the pointer rests on it. That is
+ * a passing state rather than a choice, so no preference governs it — and the
+ * one a wide viewport left behind does not follow the reader down here.
+ */
+export function tocView(pref: TocPref, wide: boolean, hovered: boolean): TocView {
+  if (!wide) return hovered ? 'popover' : 'collapsed';
+  return !pref.manual || pref.open ? 'docked' : 'collapsed';
 }
 
 /** A user-driven open/close always takes the outline out of auto mode. */

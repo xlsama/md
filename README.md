@@ -1,58 +1,58 @@
 # writedown
 
-在浏览器里编辑本地 Markdown 文件。一条 `md` 命令，文件读写走本地常驻服务，浏览器端零权限弹窗；AI agent 改动实时同步进编辑器，保存自动排版。
+English | [简体中文](./README_zh.md)
 
 Edit local Markdown files in your browser. One `md` command — a tiny local daemon does the file I/O (no browser permission prompts), external changes from AI agents sync in live, and every save is auto-formatted.
 
-![screenshot](docs/screenshot.jpg)
+![writedown](docs/screenshot-en.jpg)
 
-## 特性 / Features
+## Features
 
-- **`md file.md` / `md dir` 即开即用** — daemon 未启动会自动拉起 / auto-starts the daemon on first use
-- **Typora 式所见即所得** — [Meowdown](https://github.com/prosekit/meowdown) 混合渲染，focus / show / hide 三种语法可见度 / hybrid WYSIWYG rendering
-- **保存即格式化** — [autocorrect](https://github.com/huacnlee/autocorrect)（中英文空格）+ [oxfmt](https://github.com/oxc-project/oxfmt)（Markdown 排版），磁盘永远整洁，回灌不打断输入 / every save runs autocorrect + oxfmt; reflow never interrupts typing
-- **与 AI agent 共同编辑** — 外部改动实时刷新；冲突时并排 diff 选边 / live sync with external edits, side-by-side diff on conflict
-- **链接卡片** — 独占段落的 YouTube/X/网站链接渲染为播放器、推文卡、站点卡片，文件里仍是纯 URL / rich link cards while markdown stays plain URLs
-- **文件树（内联新建/重命名）/ 文件名模糊过滤 / 大纲 / wikilink / 图片粘贴 / 设置面板 / 亮暗主题**
-- **开机自启** — `md service install`（macOS launchd）
+- **Instant open** — `md file.md` / `md dir` auto-starts the daemon on first use
+- **Typora-style WYSIWYG** — hybrid rendering by [Meowdown](https://github.com/prosekit/meowdown): syntax peeks out only where your cursor rests
+- **Format on save** — [autocorrect](https://github.com/huacnlee/autocorrect) (CJK spacing) + [oxfmt](https://github.com/oxc-project/oxfmt) (Markdown layout); files on disk stay tidy, reflow never interrupts typing
+- **Co-edit with AI agents** — external changes sync in live; side-by-side diff to pick a side on conflict
+- **Rich link cards** — a YouTube / X / website URL on its own line renders as a player, tweet card, or site card, while the markdown stays a plain URL
+- **File tree with inline create/rename, fuzzy filename filter, outline, wikilinks, image paste, settings panel, light & dark themes**
+- **Start at login** — `md service install` (macOS launchd)
 
-## 安装 / Install
+## Install
 
-需要 [Bun](https://bun.sh) ≥ 1.2。Requires Bun ≥ 1.2.
+Requires [Bun](https://bun.sh) ≥ 1.2.
 
 ```bash
 bun add -g writedown   # or: pnpm add -g writedown
 ```
 
-升级后无需手动重启：下次运行 `md` 时 CLI 发现常驻 daemon 版本不一致会自动重启它，已打开的页面自动重连。Upgrades are seamless — the next `md` run detects the version mismatch, restarts the daemon, and open tabs reconnect automatically.
+Upgrades are seamless — the next `md` run detects the daemon version mismatch, restarts it, and open tabs reconnect automatically.
 
 ```bash
 bun add -g writedown@latest   # upgrade
 ```
 
-## 使用 / Usage
+## Usage
 
 ```bash
-md notes.md               # 打开单个文件（工作区为其父目录）/ open a file
-md ~/notes                # 打开目录 / open a directory
-md                        # 恢复上次工作区 / reopen last workspace
-md service install        # 开机自启 / start at login (launchd)
+md notes.md               # open a file (its folder becomes the workspace)
+md ~/notes                # open a directory
+md                        # reopen the last workspace
+md service install        # start at login (launchd)
 md service uninstall
 ```
 
-端口默认 `2233`（`--port` / `MD_PORT` 覆盖），只监听 `127.0.0.1`。Default port `2233`, bound to `127.0.0.1` only.
+Default port `2233` (override with `--port` / `MD_PORT`), bound to `127.0.0.1` only. Settings live in `~/.config/writedown/settings.json`, editable from the in-app settings dialog.
 
-## 开发 / Development
+## Development
 
 ```bash
 pnpm install
 pnpm dev      # daemon (2233) + vite dev (5173)
-pnpm test     # bun test（server e2e + web 单元测试）
+pnpm test     # bun test (server e2e + web unit tests)
 pnpm lint     # oxlint
 pnpm build    # tsc -b + vite build
 ```
 
-架构与协议设计见 [DESIGN.md](./DESIGN.md)。Architecture and protocol live in [DESIGN.md](./DESIGN.md) (Chinese).
+Architecture and protocol live in [DESIGN.md](./DESIGN.md) (Chinese).
 
 ## License
 

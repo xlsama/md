@@ -16,6 +16,7 @@ const custom: Settings = {
   linkEmbeds: false,
   saveDebounceMs: 800,
   sidebarOpen: true,
+  sidebarWidth: 320,
 };
 
 describe('readCachedSettings', () => {

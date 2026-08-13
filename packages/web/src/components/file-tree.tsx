@@ -8,7 +8,14 @@ import type {
 import { FileTree, useFileTree } from '@pierre/trees/react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from 'writedown/protocol';
 import { basename, dirname, isMarkdown, withMarkdownExtension } from '../lib/paths.ts';
+import {
+  dragSidebar,
+  sidebarShown,
+  SIDEBAR_NARROW_QUERY,
+  type SidebarDrag,
+} from '../lib/sidebar.ts';
 import { toggledTheme } from '../lib/theme.ts';
 import { diffTreePaths } from '../lib/tree.ts';
 import {
@@ -22,6 +29,7 @@ import { useStore, writeSettings } from '../store.ts';
 import { Icon } from './icon.tsx';
 import { IconButton } from './icon-button.tsx';
 import { MenuItem, MenuSeparator, MenuSurface, useDismiss } from './menu.tsx';
+import { useMediaQuery } from './use-media-query.ts';
 import { useSystemTheme } from './use-system-theme.ts';
 
 /**
@@ -66,8 +74,106 @@ const TREE_CSS = `${HIDE_FILE_ICONS}\n${SMALL_CHEVRON}\n${DIRTY_DOT}`;
 /** Stable across renders: it doubles as the tree's repaint handle (see below). */
 const TREE_ICONS = { set: 'none' } as const;
 
-/** Matches the `w-64` of the column inside the collapsing panel. */
-const SIDEBAR_WIDTH = '16rem';
+/**
+ * The panel's edge: a drag handle wide enough to hit, drawn as the 1px line
+ * that was already there.
+ *
+ * Only the colour changes — on hover, and for as long as a drag lasts — so the
+ * layout never twitches under the pointer. The handle sits inside the panel
+ * rather than straddling its border, because the panel clips its own overflow
+ * while collapsing.
+ */
+function SidebarResizer({
+  width,
+  onDrag,
+  onDrop,
+}: {
+  width: number;
+  onDrag: (drag: SidebarDrag) => void;
+  onDrop: () => void;
+}) {
+  const [dragging, setDragging] = useState(false);
+  const from = useRef<{ x: number; width: number } | null>(null);
+
+  // The pointer spends a drag well outside the handle, and every element it
+  // crosses would otherwise impose its own cursor — and take the text under it
+  // into a selection.
+  useEffect(() => {
+    if (!dragging) return undefined;
+    const { style } = document.body;
+    const cursor = style.cursor;
+    const select = style.userSelect;
+    style.cursor = 'col-resize';
+    style.userSelect = 'none';
+    return () => {
+      style.cursor = cursor;
+      style.userSelect = select;
+    };
+  }, [dragging]);
+
+  const stop = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (from.current === null) return;
+    from.current = null;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    setDragging(false);
+    onDrop();
+  };
+
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="调整文件树宽度"
+      aria-valuenow={width}
+      aria-valuemin={SIDEBAR_MIN_WIDTH}
+      aria-valuemax={SIDEBAR_MAX_WIDTH}
+      tabIndex={0}
+      onPointerDown={(event) => {
+        if (event.button !== 0) return;
+        // Otherwise the press starts a text selection in the tree behind it.
+        event.preventDefault();
+        from.current = { x: event.clientX, width };
+        event.currentTarget.setPointerCapture(event.pointerId);
+        setDragging(true);
+      }}
+      onPointerMove={(event) => {
+        const start = from.current;
+        if (start === null) return;
+        const dx = event.clientX - start.x;
+        // Dragging outwards is what widens the panel, and outwards is leftwards
+        // once the interface is mirrored.
+        onDrag(dragSidebar(start.width, document.dir === 'rtl' ? -dx : dx));
+      }}
+      onPointerUp={stop}
+      onPointerCancel={stop}
+      // The same edge for keyboards, in steps rather than pixels. A step that
+      // would take it past the minimum stops there; closing the panel is what
+      // the toolbar's own toggle is for.
+      onKeyDown={(event) => {
+        const step = event.key === 'ArrowLeft' ? -16 : event.key === 'ArrowRight' ? 16 : 0;
+        if (step === 0) return;
+        event.preventDefault();
+        onDrag(dragSidebar(width, document.dir === 'rtl' ? -step : step));
+        onDrop();
+      }}
+      className="group absolute inset-y-0 end-0 z-10 w-1.5 cursor-col-resize"
+    >
+      <div
+        className={`absolute inset-y-0 end-0 w-px transition-colors ${
+          dragging ? 'bg-[var(--md-accent)]' : 'bg-transparent group-hover:bg-[var(--md-accent)]'
+        }`}
+      />
+    </div>
+  );
+}
+
+/** Whether the file tree is on screen — the toolbar toggle reads it too. */
+export function useSidebarShown(): boolean {
+  const open = useStore((s) => s.settings.sidebarOpen);
+  const narrow = useStore((s) => s.sidebarNarrow);
+  const override = useStore((s) => s.sidebarOverride);
+  return sidebarShown(open, narrow, override);
+}
 
 /** Canonical tree paths keep a trailing slash on directories; the daemon does not. */
 function toServerPath(path: string): string {
@@ -333,7 +439,16 @@ export function Sidebar() {
   const docPath = useStore((s) => s.docPath);
   const dirtyPath = useStore((s) => s.dirtyPath);
   const root = useStore((s) => s.root);
-  const open = useStore((s) => s.settings.sidebarOpen);
+  const storedWidth = useStore((s) => s.settings.sidebarWidth);
+  useMediaQuery(
+    SIDEBAR_NARROW_QUERY,
+    useStore((s) => s.setSidebarNarrow)
+  );
+  /** Non-null only while the edge is being dragged; it outranks the stored width. */
+  const [drag, setDrag] = useState<SidebarDrag | null>(null);
+  const width = drag?.width ?? storedWidth;
+  // A drag held past the collapse point previews the close it would commit to.
+  const open = useSidebarShown() && drag?.collapse !== true;
   const applied = useRef<readonly string[]>([]);
   /** Set while the effect below mirrors `docPath` into the tree selection. */
   const syncingSelection = useRef(false);
@@ -600,12 +715,19 @@ export function Sidebar() {
     // the panel slides.
     <motion.aside
       initial={false}
-      animate={{ width: open ? SIDEBAR_WIDTH : 0 }}
-      transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-      inert={open ? undefined : true}
-      className="shrink-0 overflow-hidden bg-[var(--md-panel)]"
+      animate={{ width: open ? width : 0 }}
+      // A dragged edge has to sit under the pointer, not chase it.
+      transition={drag === null ? { duration: 0.22, ease: [0.4, 0, 0.2, 1] } : { duration: 0 }}
+      className="relative shrink-0 overflow-hidden bg-[var(--md-panel)]"
     >
-      <div className="flex h-full w-64 flex-col border-r border-[var(--md-border)]">
+      {/* The column is inert while collapsed rather than the panel itself: a
+          drag held past the collapse point still has to reach the handle it
+          started on, and that handle is a sibling of this. */}
+      <div
+        style={{ width }}
+        inert={open ? undefined : true}
+        className="flex h-full flex-col border-r border-[var(--md-border)]"
+      >
         <div className="flex h-11 shrink-0 items-center gap-1 px-3">
           <span
             className="min-w-0 flex-1 truncate text-xs font-medium text-[var(--md-muted)]"
@@ -729,6 +851,21 @@ export function Sidebar() {
 
         <SidebarFooter />
       </div>
+
+      {/* Kept mounted for the length of a collapsing drag: it is the element
+          holding the pointer capture, and losing it would drop the drag. */}
+      {(open || drag !== null) && (
+        <SidebarResizer
+          width={width}
+          onDrag={setDrag}
+          onDrop={() => {
+            if (drag === null) return;
+            setDrag(null);
+            if (drag.collapse) writeSettings({ sidebarOpen: false });
+            else if (drag.width !== storedWidth) writeSettings({ sidebarWidth: drag.width });
+          }}
+        />
+      )}
     </motion.aside>
   );
 }

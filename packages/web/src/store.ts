@@ -5,6 +5,7 @@ import { markdownFiles, toTreePaths } from './lib/tree.ts';
 import type { TocEntry } from './lib/toc.ts';
 import { readCachedSettings } from './lib/settings.ts';
 import { applyTheme } from './lib/theme.ts';
+import { SIDEBAR_NARROW_QUERY } from './lib/sidebar.ts';
 import {
   manualPref,
   readTocPref,
@@ -56,6 +57,10 @@ interface State {
   tocPref: TocPref;
   /** Whether the viewport is wide enough to dock the outline. */
   tocWide: boolean;
+  /** Whether the window is too narrow to give the file tree its own column. */
+  sidebarNarrow: boolean;
+  /** Whether the reader has re-opened the tree despite that. */
+  sidebarOverride: boolean;
   readOnly: boolean;
   toasts: Toast[];
   dialog: Dialog | null;
@@ -76,6 +81,8 @@ interface State {
   setToc: (toc: TocEntry[]) => void;
   setTocOpen: (open: boolean) => void;
   setTocWide: (wide: boolean) => void;
+  setSidebarNarrow: (narrow: boolean) => void;
+  setSidebarOverride: (override: boolean) => void;
   toggleReadOnly: () => void;
   pushToast: (message: string, kind?: Toast['kind']) => void;
   dismissToast: (id: number) => void;
@@ -100,6 +107,8 @@ export const useStore = create<State>()((set) => ({
   toc: [],
   tocPref: readTocPref(localStorage.getItem(TOC_KEY)),
   tocWide: window.matchMedia(TOC_WIDE_QUERY).matches,
+  sidebarNarrow: window.matchMedia(SIDEBAR_NARROW_QUERY).matches,
+  sidebarOverride: false,
   readOnly: localStorage.getItem(READ_ONLY_KEY) === '1',
   toasts: [],
   dialog: null,
@@ -121,6 +130,10 @@ export const useStore = create<State>()((set) => ({
     set({ tocPref });
   },
   setTocWide: (tocWide) => set({ tocWide }),
+  // Crossing the breakpoint is a fresh question, so the previous answer to it
+  // goes with the crossing: the tree folds away again on the next narrow window.
+  setSidebarNarrow: (sidebarNarrow) => set({ sidebarNarrow, sidebarOverride: false }),
+  setSidebarOverride: (sidebarOverride) => set({ sidebarOverride }),
   toggleReadOnly: () =>
     set((state) => {
       const readOnly = !state.readOnly;
