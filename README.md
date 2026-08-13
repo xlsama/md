@@ -11,7 +11,7 @@ Edit local Markdown in your browser. One `md` command opens a file or folder: a 
 - Instant open: `md file.md` or `md dir` auto-starts the daemon
 - WYSIWYG: hybrid rendering by [Meowdown](https://github.com/prosekit/meowdown) — syntax peeks out only at the cursor
 - Format on save: [autocorrect](https://github.com/huacnlee/autocorrect) for CJK spacing, [oxfmt](https://github.com/oxc-project/oxfmt) for layout; reflow never interrupts typing
-- Co-edit with AI agents: external changes sync in live, side-by-side diff on conflict
+- Co-edit with AI agents: external changes sync in live
 - Link cards: a YouTube, X, or website URL on its own line renders as a player, tweet card, or site card — the markdown stays a plain URL
 - File tree with inline create/rename, fuzzy filename filter, outline, wikilinks, image paste, settings panel, light & dark themes
 - Start at login: `md service install` (macOS launchd)
