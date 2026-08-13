@@ -2,25 +2,32 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import pkg from '../package.json';
-import { healthResponseSchema, openResponseSchema, type HealthResponse } from './protocol.ts';
+import {
+  DEFAULT_SETTINGS,
+  healthResponseSchema,
+  openResponseSchema,
+  type HealthResponse,
+} from './protocol.ts';
+import { migrateLegacySettings, settingsPath } from './settings.ts';
 import { ensureStateDir, logPath, readState, resolvePort } from './state.ts';
 import { runDaemonForeground } from './daemon.ts';
 import { installService, serviceConfig, uninstallService } from './service.ts';
 
-const USAGE = `md — 浏览器里的本地 Markdown 编辑器
+const USAGE = `md — a local Markdown editor in your browser
 
-用法：
-  md <path>                 打开文件或目录（自动拉起 daemon）
-  md                        恢复上次工作区
-  md daemon [--port N]      前台运行 daemon
-  md service install        安装开机自启服务（launchd / systemd / 计划任务）
-  md service uninstall      卸载开机自启服务
-  md service config         打印将要写入的服务配置（不写盘）
+Usage:
+  md <path>                 Open a file or directory (starts the daemon if needed)
+  md                        Reopen the last workspace
+  md config                 Print the settings file path and contents
+  md daemon [--port N]      Run the daemon in the foreground
+  md service install        Install a startup service (launchd / systemd / Task Scheduler)
+  md service uninstall      Remove the startup service
+  md service config         Print the service config without writing it
 
-选项：
-  --port N                  端口（默认 2233，也可用 MD_PORT）
-  -h, --help                显示帮助
-  -v, --version             显示版本
+Options:
+  --port N                  Port (default 2233, or set MD_PORT)
+  -h, --help                Show this help
+  -v, --version             Show version
 `;
 
 interface ParsedArgs {
@@ -146,7 +153,7 @@ async function commandOpen(target: string | undefined, port: number): Promise<vo
 
   let health = await fetchHealth(port);
   if (health && health.version !== pkg.version) {
-    console.log(`md: daemon ${health.version} → ${pkg.version}，重启中…`);
+    console.log(`md: daemon ${health.version} → ${pkg.version}, restarting…`);
     health = await restartDaemon(port, health.pid);
     if (!health) fail(`daemon restart failed on port ${port} — see ${logPath()}`);
   }
@@ -174,6 +181,27 @@ async function commandOpen(target: string | undefined, port: number): Promise<vo
   } else {
     console.log(`md: focused ${data.focus ?? data.root} in ${data.clients} connected tab(s)`);
   }
+}
+
+async function commandConfig(): Promise<void> {
+  // `md config` can be the first thing a user runs after an upgrade, before any
+  // daemon started, so it moves the old file itself rather than reporting the
+  // new path as empty while the settings still sit under `writedown`.
+  await migrateLegacySettings();
+  const file = settingsPath();
+  console.log(`# ${file}`);
+  let raw: string | null = null;
+  try {
+    raw = fs.readFileSync(file, 'utf8');
+  } catch {}
+  if (raw === null) {
+    // Nothing written yet: the daemon runs on the defaults, so print those
+    // rather than leaving the reader with a path and no idea what is in effect.
+    console.log('# not created yet — running on these defaults');
+    console.log(JSON.stringify(DEFAULT_SETTINGS, null, 2));
+    return;
+  }
+  process.stdout.write(raw.endsWith('\n') ? raw : `${raw}\n`);
 }
 
 async function commandDaemon(port: number): Promise<void> {
@@ -222,6 +250,9 @@ async function main(): Promise<void> {
   const [command, ...rest] = args.positional;
 
   switch (command) {
+    case 'config':
+      await commandConfig();
+      return;
     case 'daemon':
       await commandDaemon(port);
       return;

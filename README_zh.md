@@ -40,12 +40,13 @@ mise use -g npm:@xlsama/md   # 或用 mise
 md notes.md          # 打开文件，其父目录作为工作区
 md ~/notes           # 打开目录
 md                   # 恢复上次工作区
+md config            # 打印配置文件路径与内容
 md service install   # 开机自启
 md service uninstall # 取消开机自启
 ```
 
 - 端口默认 `2233`，可用 `--port` 或 `MD_PORT` 覆盖，只监听 `127.0.0.1`
-- 配置位于 `~/.config/writedown/settings.json`，也可在应用内设置面板修改
+- 配置位于 `~/.config/md/settings.json`，也可在应用内设置面板修改
 
 ## 许可
 

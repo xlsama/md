@@ -40,12 +40,13 @@ Upgrades (`bun add -g @xlsama/md@latest`) need no manual restart: the next `md` 
 md notes.md          # open a file; its folder becomes the workspace
 md ~/notes           # open a directory
 md                   # reopen the last workspace
+md config            # print the settings file path and contents
 md service install   # start at login
 md service uninstall
 ```
 
 - Default port `2233` (override with `--port` / `MD_PORT`), bound to `127.0.0.1` only
-- Settings live in `~/.config/writedown/settings.json`, also editable in the in-app settings dialog
+- Settings live in `~/.config/md/settings.json`, also editable in the in-app settings dialog
 
 ## License
 
