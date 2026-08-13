@@ -158,6 +158,7 @@ Meowdown 是非受控组件：`<MeowdownEditor initialMarkdown={…} handleRef={
 - **图片占位态**（`image-loading.ts` + `lib/image-status.ts`）：加载中流光骨架、失败换成图标+「图片加载失败」卡片，都写在 `data-md-img` 上。规则：**新出现的图片一律以 loading 起步**；只有「这个元素当前的 src 真的 error 了」才进失败态——`error` 事件延后一个 task 再按当时的 src 复核，src 在中途被改写（相对路径 resolve 前后是两个 src）时那次 error 直接作废。失败态**忽略**持久化的 `data-width/height`（那尺寸描述的是一张不存在的图），统一用标准占位框；加载中仍尊重持久化尺寸，免得图进来时跳版。
 - **块级媒体宽度**：图片 / 视频 / 推文 / 站点卡片共用 `--md-media-width: min(390px, 100%)`，边缘在正文列里对齐。用户手动拖过的尺寸继续尊重，上限是正文列宽（resizable root 自带 `max-width: 100%`，天然被容器夹住）。
 - **粘贴图片**：拦截 paste/drop 中的图片（Meowdown 若有 upload/file 回调 prop 优先走它，没有则在容器上拦 paste 事件）→ `POST /api/assets`（multipart：file + docPath）→ 服务端存 `<doc 所在目录>/assets/<yyyyMMdd-HHmmss>-<原名或 pasted.png>` → 返回相对路径 → 编辑器光标处插入 ``。
+- **粘贴转存远程图片**（`importPastedImages` 开关，默认开）：容器 paste 事件 capture 阶段读剪贴板文本（不动粘贴本身），提取其中的远程图片 URL（markdown `![]()` 与 `<img src>`，单次上限 50、去重）→ 逐个 `POST /api/assets/import`（并发 3）→ daemon 按 link-meta 同款 SSRF 规则下载（仅 http(s)、逐跳查重定向、必须声明 image/* 类型、20MB 上限）存进 assetsDir，文件名 `<时间戳>-<URL哈希前8>.<扩展名>` → 前端把编辑器文档里的该 URL **按字面文本替换**为本地相对路径（正常 transaction：可撤销、光标经 mapping 保持、触发自动保存）。文档已切换/已编辑掉 URL 时替换自然落空。失败静默保留原链接，最后汇总一条 toast。动机：粘贴来的图片链接（飞书/Notion/带签名的 CDN）会过期，本地才留得住。
 - **TOC**：对当前 markdown 提取标题行（跳过 code fence 内），点击 → 编辑器 DOM 里第 n 个对应 heading 元素 `scrollIntoView`。
 - **暗色模式**：由「设置系统」的 `theme` 决定。三方样式（meowdown、@pierre/trees、@pierre/diffs）的颜色都是 `light-dark()` 对，因此强制主题只需在 `html` 上钉住 `color-scheme`；`system` 时移除该属性，回到 `prefers-color-scheme`。
 
@@ -168,6 +169,7 @@ Meowdown 是非受控组件：`<MeowdownEditor initialMarkdown={…} handleRef={
 | `GET /api/health` | `{ pid, version, workspace, clients, ripgrep, watching }`（clients = 当前 WS 连接数；`ripgrep` = `rg` 是否在 PATH 上；`watching` = 文件监听是否活着，为 false 时前端 toast 提示外部改动不会自动刷新） |
 | `POST /api/open` | body `{ path }`（绝对路径）。解析 root/focus → 切工作区 → 广播 `focus`。返回 `{ url, clients }`。CLI 专用 |
 | `POST /api/assets` | multipart 存图，返回 `{ relativePath }` |
+| `POST /api/assets/import` | body `{ url, docPath }`。下载远程图片存进 assetsDir（SSRF 防护同 link-meta），返回 `{ relativePath, workspacePath }` |
 | `GET /raw/*` | 按工作区相对路径回源文件（图片等）。**必须**做 realpath 包含校验防路径穿越 |
 | `GET /ws` | WebSocket upgrade |
 | `GET /*` | 静态服务 `packages/web/dist`（SPA fallback 到 index.html）；dist 不存在时返回提示页「先 pnpm build」。`assets/*` 文件名带内容哈希 → `immutable` 长缓存；index.html → `no-store`，否则升级后浏览器还端着上个版本的壳 |
@@ -255,6 +257,7 @@ Linux / Windows 的运行时行为未在开发机上验证，只保证类型检�
   - `format.oxfmt`: boolean（默认 true，同上）
   - `assetsDir`: string（默认 `assets`，`/api/assets` 使用；校验单段合法目录名）
   - `linkEmbeds`: boolean（默认 true，关掉后独占段落链接只渲染普通链接，前端渲染层读取）
+  - `importPastedImages`: boolean（默认 true，粘贴时转存远程图片，见「粘贴转存远程图片」）
   - `saveDebounceMs`: number（默认 500，范围 100–5000，前端 session 读取）
   - `sidebarOpen`: boolean（默认 false，侧栏折叠状态；由 TopBar 的开关静默写入，不出现在设置 dialog 里）
   - `sidebarOpen`: boolean（默认 **false**——首屏侧栏收起、正文居中；TopBar 最左侧 panel-left 按钮切换，静默 PUT 持久化；**不进设置 dialog 表单**，无响应式行为，只认配置）

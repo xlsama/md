@@ -15,6 +15,7 @@ const custom: Settings = {
   format: { autocorrect: false, oxfmt: true },
   assetsDir: '图片',
   linkEmbeds: false,
+  importPastedImages: false,
   saveDebounceMs: 800,
   sidebarOpen: true,
   sidebarWidth: 320,
@@ -48,6 +49,7 @@ describe('toForm', () => {
       oxfmt: true,
       assetsDir: '图片',
       linkEmbeds: false,
+      importPastedImages: false,
       saveDebounceMs: '800',
     });
   });
@@ -138,6 +140,7 @@ describe('formPatch', () => {
       format: { autocorrect: false, oxfmt: true },
       assetsDir: '图片',
       linkEmbeds: false,
+      importPastedImages: false,
       saveDebounceMs: 800,
     });
   });

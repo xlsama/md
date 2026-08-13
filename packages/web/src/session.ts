@@ -1,5 +1,8 @@
 import type { ClientMessage, ServerMessage, TreeNode } from '@xlsama/md/protocol';
 import type { EditorHandle } from '@meowdown/react';
+import { importAsset } from './api.ts';
+import { extractRemoteImageUrls } from './lib/paste-images.ts';
+import { replaceTextInEditor } from './lib/replace-text.ts';
 import { extractToc, sameToc } from './lib/toc.ts';
 import { decideWorkspace, type RouteBridge } from './lib/route.ts';
 import { hasPath } from './lib/tree.ts';
@@ -126,6 +129,50 @@ class Session {
 
   onBlur(): void {
     this.maybeReflow('blur');
+  }
+
+  /**
+   * Imports the remote images a paste brought in — see `paste-images.ts`.
+   *
+   * Fire-and-forget from the paste event: the pasted content lands in the
+   * document immediately (remote URLs and all), and each image is swapped to
+   * its local path as its download finishes. The swap is a literal text
+   * replacement, so a document that moved on in the meantime — switched away,
+   * edited, undone — simply no longer contains the URL and nothing happens.
+   */
+  importPastedImages(pasted: string): void {
+    if (!useStore.getState().settings.importPastedImages) return;
+    const docPath = this.path;
+    if (docPath === null) return;
+    const urls = extractRemoteImageUrls(pasted);
+    if (urls.length === 0) return;
+    void this.runImageImports(urls, docPath);
+  }
+
+  private async runImageImports(urls: string[], docPath: string): Promise<void> {
+    let failed = 0;
+    const queue = [...urls];
+    const worker = async (): Promise<void> => {
+      for (;;) {
+        const url = queue.shift();
+        if (url === undefined) return;
+        try {
+          const asset = await importAsset(url, docPath);
+          const editor = this.handle?.editor;
+          // The replacement dispatches a normal transaction, so `onDocChange`
+          // fires and the autosave pipeline persists the rewritten link.
+          if (editor !== undefined) replaceTextInEditor(editor, url, asset.relativePath);
+        } catch {
+          failed += 1;
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(3, urls.length) }, worker));
+    // One summary instead of a toast per image: a paste can carry dozens, and
+    // a kept remote link is a degradation, not a loss.
+    if (failed > 0) {
+      useStore.getState().pushToast(`${String(failed)} 张网络图片转存失败，已保留原链接`, 'error');
+    }
   }
 
   /** `Cmd+S`: save immediately, and flow formatted text back if one is staged. */

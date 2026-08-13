@@ -38,6 +38,7 @@ export interface SettingsForm {
   oxfmt: boolean;
   assetsDir: string;
   linkEmbeds: boolean;
+  importPastedImages: boolean;
   /** Text rather than a number: a half-typed value must not fight the input. */
   saveDebounceMs: string;
 }
@@ -49,6 +50,7 @@ export function toForm(settings: Settings): SettingsForm {
     oxfmt: settings.format.oxfmt,
     assetsDir: settings.assetsDir,
     linkEmbeds: settings.linkEmbeds,
+    importPastedImages: settings.importPastedImages,
     saveDebounceMs: String(settings.saveDebounceMs),
   };
 }
@@ -107,6 +109,7 @@ export function isFormDirty(form: SettingsForm, settings: Settings): boolean {
     form.oxfmt !== saved.oxfmt ||
     form.assetsDir !== saved.assetsDir ||
     form.linkEmbeds !== saved.linkEmbeds ||
+    form.importPastedImages !== saved.importPastedImages ||
     form.saveDebounceMs.trim() !== saved.saveDebounceMs
   );
 }
@@ -118,6 +121,7 @@ export function formPatch(form: SettingsForm): SettingsPatch {
     format: { autocorrect: form.autocorrect, oxfmt: form.oxfmt },
     assetsDir: form.assetsDir,
     linkEmbeds: form.linkEmbeds,
+    importPastedImages: form.importPastedImages,
     saveDebounceMs: Number(form.saveDebounceMs),
   };
 }

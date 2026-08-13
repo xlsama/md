@@ -72,3 +72,24 @@ export async function uploadAsset(file: File, docPath: string): Promise<AssetRes
   if (!parsed.success) throw new Error('上传接口返回了预期之外的数据');
   return parsed.data;
 }
+
+/**
+ * Asks the daemon to download a remote image into the assets directory beside
+ * `docPath`. Same response shape as {@link uploadAsset}; the caller swaps the
+ * remote URL in the document for `relativePath`.
+ */
+export async function importAsset(url: string, docPath: string): Promise<AssetResponse> {
+  const res = await fetch('/api/assets/import', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ url, docPath }),
+  });
+  const payload: unknown = await res.json().catch(() => null);
+  if (!res.ok) {
+    const detail = z.object({ error: z.string() }).safeParse(payload);
+    throw new Error(detail.success ? detail.data.error : `转存失败（HTTP ${String(res.status)}）`);
+  }
+  const parsed = assetResponseSchema.safeParse(payload);
+  if (!parsed.success) throw new Error('转存接口返回了预期之外的数据');
+  return parsed.data;
+}

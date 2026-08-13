@@ -7,6 +7,7 @@ import { zValidator } from '@hono/zod-validator';
 import type { Server, ServerWebSocket } from 'bun';
 import pkg from '../package.json';
 import {
+  assetImportRequestSchema,
   linkMetaQuerySchema,
   openRequestSchema,
   parseClientMessage,
@@ -14,11 +15,13 @@ import {
   type ClientMessage,
   type ServerMessage,
 } from './protocol.ts';
+import { downloadImage } from './asset-import.ts';
 import { getSettings, loadSettings, updateSettings, watchSettings } from './settings.ts';
 import { LinkMetaCache, LinkTargetError, normalizeLinkUrl, type LinkMetaCacheOptions } from './link-meta.ts';
 import {
   createEntry,
   deleteEntry,
+  hashContent,
   isMarkdown,
   PathViolationError,
   renameEntry,
@@ -182,15 +185,24 @@ function createRoutes(ctx: DaemonContext) {
         if (!(file instanceof File)) return c.json({ error: 'missing file' }, 400);
         const docPathRaw = form.get('docPath');
         const docPath = typeof docPathRaw === 'string' ? docPathRaw : '';
-        const docDir = docPath ? path.posix.dirname(docPath) : '.';
-        const dirPrefix = docDir === '.' || docDir === '' ? '' : `${docDir}/`;
         const name = `${timestampPrefix()}-${sanitizeAssetName(file.name)}`;
-        const relativePath = `${getSettings().assetsDir}/${name}`;
-        const workspacePath = `${dirPrefix}${relativePath}`;
-        const abs = await ctx.workspace.resolve(workspacePath);
-        await fs.mkdir(path.dirname(abs), { recursive: true });
-        await Bun.write(abs, await file.arrayBuffer());
-        return c.json({ relativePath, workspacePath });
+        return c.json(await saveAsset(ctx, docPath, name, await file.arrayBuffer()));
+      } catch (err) {
+        const status = err instanceof PathViolationError ? 403 : 400;
+        return c.json({ error: errorMessage(err) }, status);
+      }
+    })
+    .post('/api/assets/import', zValidator('json', assetImportRequestSchema), async (c) => {
+      const { url, docPath } = c.req.valid('json');
+      try {
+        ctx.workspace.requireRoot();
+        const image = await downloadImage(url, {
+          allowPrivateHosts: ctx.linkMeta.allowPrivateHosts,
+        });
+        // The URL hash keeps two images pasted in the same second apart; the
+        // original names are meaningless tokens on most hosts anyway.
+        const name = `${timestampPrefix()}-${hashContent(url).slice(0, 8)}.${image.extension}`;
+        return c.json(await saveAsset(ctx, docPath, name, image.bytes));
       } catch (err) {
         const status = err instanceof PathViolationError ? 403 : 400;
         return c.json({ error: errorMessage(err) }, status);
@@ -243,6 +255,27 @@ function createRoutes(ctx: DaemonContext) {
       if (asset) return asset;
       return c.html(PLACEHOLDER_PAGE, 200);
     });
+}
+
+/**
+ * Writes an asset beside `docPath` under the configured assets directory.
+ * `relativePath` is what goes into the markdown; `workspacePath` is what
+ * `/raw/` serves. Both come back to the caller in the response body.
+ */
+async function saveAsset(
+  ctx: DaemonContext,
+  docPath: string,
+  name: string,
+  bytes: ArrayBuffer | Uint8Array
+): Promise<{ relativePath: string; workspacePath: string }> {
+  const docDir = docPath ? path.posix.dirname(docPath) : '.';
+  const dirPrefix = docDir === '.' || docDir === '' ? '' : `${docDir}/`;
+  const relativePath = `${getSettings().assetsDir}/${name}`;
+  const workspacePath = `${dirPrefix}${relativePath}`;
+  const abs = await ctx.workspace.resolve(workspacePath);
+  await fs.mkdir(path.dirname(abs), { recursive: true });
+  await Bun.write(abs, bytes);
+  return { relativePath, workspacePath };
 }
 
 async function serveWebAsset(dist: string, pathname: string): Promise<Response | null> {

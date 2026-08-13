@@ -13,6 +13,7 @@
 - 保存即格式化：[autocorrect](https://github.com/huacnlee/autocorrect) 处理中英文空格，[oxfmt](https://oxc.rs/docs/guide/usage/formatter) 负责排版，回灌不打断输入
 - 与 AI agent 共同编辑：外部改动实时同步
 - 链接卡片：独占段落的 YouTube、X 或网站链接渲染为播放器、推文卡或站点卡片，文件中仍是纯 URL
+- 粘贴留得住图：粘贴内容里的网络图片自动下载到文档旁并改用本地链接，赶在签名 URL 过期之前
 - 文件树内联新建与重命名、文件名模糊过滤、大纲、wikilink、图片粘贴、设置面板、亮暗主题
 - 开机自启：`md service install`（launchd / systemd / 计划任务）
 

@@ -136,6 +136,15 @@ export function Editor() {
       onBlur={() => {
         session.onBlur();
       }}
+      // Capture phase: the clipboard is read before ProseMirror consumes the
+      // event. The paste itself proceeds untouched — this only notes which
+      // remote images it carried so they can be imported in the background.
+      onPasteCapture={(event) => {
+        const data = event.clipboardData;
+        session.importPastedImages(
+          `${data.getData('text/plain')}\n${data.getData('text/html')}`
+        );
+      }}
     >
       <MeowdownEditor
         handleRef={handleRef}

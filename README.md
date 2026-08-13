@@ -13,6 +13,7 @@ Edit local Markdown in your browser. One `md` command opens a file or folder: a 
 - Format on save: [autocorrect](https://github.com/huacnlee/autocorrect) for CJK spacing, [oxfmt](https://oxc.rs/docs/guide/usage/formatter) for layout; reflow never interrupts typing
 - Co-edit with AI agents: external changes sync in live
 - Link cards: a YouTube, X, or website URL on its own line renders as a player, tweet card, or site card — the markdown stays a plain URL
+- Paste keeps images: remote images in pasted markdown are downloaded next to the document and relinked locally, before the signed URLs expire
 - File tree with inline create/rename, fuzzy filename filter, outline, wikilinks, image paste, settings panel, light & dark themes
 - Start at login: `md service install` (launchd / systemd / Task Scheduler)
 

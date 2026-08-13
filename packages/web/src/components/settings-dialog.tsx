@@ -348,6 +348,19 @@ export function SettingsDialog() {
                   }
                 />
                 <Field
+                  title="粘贴时转存图片"
+                  hint="粘贴的内容里带网络图片时，自动下载到图片目录并改用本地链接，防止外链过期失效。"
+                  control={
+                    <Switch
+                      checked={form.importPastedImages}
+                      label="粘贴时转存图片"
+                      onChange={(importPastedImages) => {
+                        choose({ importPastedImages });
+                      }}
+                    />
+                  }
+                />
+                <Field
                   title="链接卡片"
                   hint="独占一段的裸链接渲染成卡片或嵌入；关掉后只是普通链接。"
                   control={

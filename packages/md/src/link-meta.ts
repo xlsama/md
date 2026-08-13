@@ -174,7 +174,7 @@ export function normalizeLinkUrl(raw: string, options: { allowPrivateHosts?: boo
  * *ever* answers with a private address never gets fetched, which is what
  * rebinding attacks rely on.
  */
-async function assertPublicTarget(hostname: string): Promise<void> {
+export async function assertPublicTarget(hostname: string): Promise<void> {
   if (isBlockedHostname(hostname)) throw new LinkTargetError('拒绝抓取本机或内网地址');
   const host = stripBrackets(hostname);
   if (net.isIP(host) !== 0) return;

@@ -135,6 +135,13 @@ export const settingsSchema = z.object({
     .catch({ autocorrect: true, oxfmt: true }),
   assetsDir: assetsDirSchema.catch('assets'),
   linkEmbeds: z.boolean().catch(true),
+  /**
+   * Whether pasting Markdown that points at remote images downloads them into
+   * `assetsDir` and rewrites the links. On by default because pasted image
+   * URLs — Feishu, Notion, CDN links with signed tokens — tend to expire out
+   * from under the document.
+   */
+  importPastedImages: z.boolean().catch(true),
   saveDebounceMs: saveDebounceMsSchema.catch(500),
   /**
    * UI state rather than a preference, but it lives here so the sidebar is in
@@ -161,6 +168,7 @@ export const settingsPatchSchema = z.object({
     .optional(),
   assetsDir: assetsDirSchema.optional(),
   linkEmbeds: z.boolean().optional(),
+  importPastedImages: z.boolean().optional(),
   saveDebounceMs: saveDebounceMsSchema.optional(),
   sidebarOpen: z.boolean().optional(),
   sidebarWidth: sidebarWidthSchema.optional(),
@@ -320,6 +328,17 @@ export const assetResponseSchema = z.object({
 });
 
 export type AssetResponse = z.infer<typeof assetResponseSchema>;
+
+/**
+ * `POST /api/assets/import`: download `url` into the assets directory beside
+ * `docPath`. Answers with the same shape as `POST /api/assets`.
+ */
+export const assetImportRequestSchema = z.object({
+  url: z.string().min(1),
+  docPath: z.string(),
+});
+
+export type AssetImportRequest = z.infer<typeof assetImportRequestSchema>;
 
 export function parseClientMessage(raw: string): { ok: true; value: ClientMessage } | { ok: false; error: string } {
   let json: unknown;

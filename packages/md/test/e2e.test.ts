@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { startDaemon, type DaemonHandle } from '../src/daemon.ts';
+import { downloadImage } from '../src/asset-import.ts';
 import { fetchLinkMeta } from '../src/link-meta.ts';
 import {
   assetResponseSchema,
@@ -642,6 +643,105 @@ describe('save races an external write', () => {
   });
 });
 
+describe('asset import', () => {
+  // A 1×1 transparent PNG — small, but a real image with real bytes.
+  const PNG = Uint8Array.from(
+    atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='),
+    (c) => c.charCodeAt(0)
+  );
+
+  let origin: import('bun').Server<undefined>;
+  let base: string;
+  let importDaemon: DaemonHandle;
+  const IMPORT_ROOT = path.join(ROOT, 'import-ws');
+
+  beforeAll(async () => {
+    origin = Bun.serve({
+      port: 0,
+      hostname: '127.0.0.1',
+      fetch(req) {
+        const url = new URL(req.url);
+        switch (url.pathname) {
+          case '/pic.png':
+            return new Response(PNG, { headers: { 'content-type': 'image/png' } });
+          case '/hop':
+            return new Response(null, { status: 302, headers: { location: '/pic.png' } });
+          case '/page':
+            return new Response('<html></html>', { headers: { 'content-type': 'text/html' } });
+          case '/naked':
+            return new Response(PNG);
+          case '/big':
+            return new Response(new Uint8Array(256 * 1024), {
+              headers: { 'content-type': 'image/png' },
+            });
+          default:
+            return new Response('missing', { status: 404 });
+        }
+      },
+    });
+    base = `http://127.0.0.1:${String(origin.port)}`;
+    await fs.mkdir(IMPORT_ROOT, { recursive: true });
+    await fs.writeFile(path.join(IMPORT_ROOT, 'note.md'), '# n\n');
+    importDaemon = await startDaemon({
+      port: 0,
+      root: IMPORT_ROOT,
+      persistState: false,
+      webDist: path.join(ROOT, 'no-such-dist'),
+      linkMeta: { dir: path.join(ROOT, 'import-link-meta'), allowPrivateHosts: true },
+    });
+  });
+
+  afterAll(async () => {
+    await importDaemon.stop();
+    origin.stop(true);
+  });
+
+  const importAsset = (body: unknown) =>
+    fetch(`${importDaemon.url}/api/assets/import`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  test('downloads a remote image into the assets directory', async () => {
+    const res = await importAsset({ url: `${base}/pic.png`, docPath: 'note.md' });
+    expect(res.status).toBe(200);
+    const body = assetResponseSchema.parse(await res.json());
+    expect(body.relativePath).toMatch(/^assets\/\d{8}-\d{6}-[0-9a-f]{8}\.png$/);
+    const onDisk = await fs.readFile(path.join(IMPORT_ROOT, body.workspacePath));
+    expect(new Uint8Array(onDisk)).toEqual(PNG);
+  });
+
+  test('follows a redirect to the actual image', async () => {
+    const res = await importAsset({ url: `${base}/hop`, docPath: 'note.md' });
+    expect(res.status).toBe(200);
+  });
+
+  test('refuses a response that is not an image', async () => {
+    for (const target of [`${base}/page`, `${base}/naked`, `${base}/gone`]) {
+      const res = await importAsset({ url: target, docPath: 'note.md' });
+      expect(`${target} -> ${String(res.status)}`).toBe(`${target} -> 400`);
+    }
+  });
+
+  test('the byte cap aborts an oversized download', async () => {
+    await expect(
+      downloadImage(`${base}/big`, { allowPrivateHosts: true, maxBytes: 64 * 1024 })
+    ).rejects.toThrow(/上限/);
+  });
+
+  test('the private-host guard still applies on a normal daemon', async () => {
+    // The main daemon has no `allowPrivateHosts`, so the same request is
+    // refused before any bytes move.
+    const res = await fetch(`${daemon.url}/api/assets/import`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url: `${base}/pic.png`, docPath: 'note.md' }),
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
 describe('link metadata', () => {
   const PAGE = [
     '<!doctype html><html><head>',
@@ -832,6 +932,7 @@ describe('settings', () => {
       format: { autocorrect: true, oxfmt: true },
       assetsDir: 'assets',
       linkEmbeds: true,
+      importPastedImages: true,
       saveDebounceMs: 500,
       sidebarOpen: false,
       sidebarWidth: 256,
