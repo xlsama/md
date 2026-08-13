@@ -18,16 +18,21 @@ Edit local Markdown in your browser. One `md` command opens a file or folder: a 
 
 ## Install
 
-No runtime to install — every release ships a self-contained binary.
+Requires [Bun](https://bun.com) ≥ 1.2 — install it first if you don't have it:
 
 ```bash
-npm i -g @xlsama/md          # or: pnpm add -g / bun add -g
+curl -fsSL https://bun.sh/install | bash       # macOS / Linux
+powershell -c "irm bun.sh/install.ps1 | iex"   # Windows
+```
+
+Then:
+
+```bash
+bun add -g @xlsama/md        # or: pnpm add -g @xlsama/md
 mise use -g npm:@xlsama/md   # or via mise
 ```
 
-Prebuilt binaries for macOS (arm64/x64), Linux (x64/arm64) and Windows (x64) are also attached to each [release](https://github.com/xlsama/md/releases).
-
-Upgrades (`npm i -g @xlsama/md@latest`) need no manual restart: the next `md` run restarts the daemon and open tabs reconnect automatically.
+Upgrades (`bun add -g @xlsama/md@latest`) need no manual restart: the next `md` run restarts the daemon and open tabs reconnect automatically.
 
 ## Usage
 

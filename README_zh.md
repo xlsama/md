@@ -18,16 +18,21 @@
 
 ## 安装
 
-无需安装运行时，每个版本都提供自包含的二进制。
+需要 [Bun](https://bun.com) ≥ 1.2，没装的话先装：
 
 ```bash
-npm i -g @xlsama/md          # 或 pnpm add -g / bun add -g
+curl -fsSL https://bun.sh/install | bash       # macOS / Linux
+powershell -c "irm bun.sh/install.ps1 | iex"   # Windows
+```
+
+然后：
+
+```bash
+bun add -g @xlsama/md        # 或 pnpm add -g @xlsama/md
 mise use -g npm:@xlsama/md   # 或用 mise
 ```
 
-macOS（arm64/x64）、Linux（x64/arm64）、Windows（x64）的预编译二进制也附在每个 [release](https://github.com/xlsama/md/releases) 里。
-
-升级（`npm i -g @xlsama/md@latest`）后无需手动重启：下次运行 `md` 时会自动重启 daemon，已打开的页面自动重连。
+升级（`bun add -g @xlsama/md@latest`）后无需手动重启：下次运行 `md` 时会自动重启 daemon，已打开的页面自动重连。
 
 ## 使用
 

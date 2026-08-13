@@ -55,7 +55,7 @@ md/
 │   │       ├── watcher.ts     # fs.watch recursive + 防抖 + echo 抑制
 │   │       ├── format.ts      # autocorrect → oxfmt 管线 + 工作区配置发现
 │   │       ├── search.ts      # rg --json 封装
-│   │       ├── service.ts     # launchd plist 生成 / bootstrap / bootout
+│   │       ├── service.ts     # 开机自启：launchd / systemd user unit / 计划任务
 │   │       ├── state.ts       # ~/.local/state/md/（state.json、daemon.log、pid）
 │   │       ├── settings.ts    # ~/.config/writedown/settings.json 读写
 │   │       ├── link-meta.ts   # /api/link-meta：抓取 + SSRF 防护 + 内存/磁盘两级缓存
@@ -213,28 +213,22 @@ launchd plist：Label `dev.md.daemon`，`ProgramArguments` 用绝对路径（`pr
 ## 发布与开源
 
 - npm 包名 **`@xlsama/md`**（发布 packages/md 单包；`bin` 仍是 `md`），GitHub `xlsama/md`，public，MIT LICENSE。无 scope 的 `writedown` 被 npm 以「与 `write-down` 过于相似」拒绝，故走 scope。
-- **终端用户不需要 Bun**：npm 分发采用 esbuild 布局——主包 `@xlsama/md` 只放一个 Node 写的 shim（`npm/md.cjs`，`bin` 指向它），二进制拆进 `@xlsama/md-<platform>-<arch>` 子包，各自用 `os`/`cpu` 限定，主包通过 `optionalDependencies` 声明，npm 只装匹配当前平台的那一个。shim 用 `require.resolve` 找到二进制并转发 argv，找不到时打印可操作的提示并退出 1。
-- **`optionalDependencies` 不入库**：平台包只在发版后才存在于 registry，写进仓库会搅动 lockfile 并让每个贡献者白下载一个二进制。改由 `scripts/inject-optional-deps.ts` 在发布前从实际打包出的平台包目录反推写入，因此主包只可能依赖本次发布真正产出的二进制。
-- 主包 `files` 白名单：`npm`、`src`（`src` 保留是因为 `exports` 仍供 workspace 内的 web 侧 `@xlsama/md/protocol` 使用）。前端产物不再随主包分发，改为嵌进二进制。
-- 版本与发版：root `release` 脚本用 `bumpp`（升级版本 + 自动打 tag），root 维护 `CHANGELOG.md`。推 `v*` tag 触发 `.github/workflows/release.yml`：5 个平台各自原生构建 → 上传 artifact → 先发平台子包、再发主包（顺序不能反，否则主包的 optionalDependencies 短暂指向不存在的版本）→ 建 GitHub Release。artifact 上传会丢 Unix 权限位，发布前必须重新 `chmod +x`。
+- 运行时要求 Bun（bin shebang `#!/usr/bin/env bun`），README 写明 `bun` 为前置依赖，安装方式 `bun add -g @xlsama/md` / `pnpm add -g @xlsama/md`。
+- 前端产物随包分发：`prepublishOnly` 构建 `@md/web` 并把 `dist` 拷入 `packages/md/web-dist/`，daemon 静态目录解析顺序：包内 `web-dist` → 仓库 `packages/web/dist`（开发态）。`files` 白名单：`src`、`web-dist`。
+- 版本与发版：root `release` 脚本用 `bumpp`（升级版本 + 自动打 tag），root 维护 `CHANGELOG.md`。
 - README 简短中英双语；`@md/server` 包更名为 `@xlsama/md`（web 侧 import 同步改 `@xlsama/md/protocol`）。
 
-## 单文件二进制分发（2026-08-13 定稿）
+## 跨平台适配（2026-08-13 定稿）
 
-目标：用户不装 Bun 也能用。`bun build --compile` 把 Bun runtime、应用代码、前端产物打进一个可执行文件。
+分发方式仍是「用户自己装 Bun + npm 源码包」，不做单文件二进制：`bun build --compile` 验证过可行（原生模块能嵌、前端产物能嵌），但原生模块无法交叉编译，必须为每个平台配一条 CI 流水线，维护成本不划算。
 
-- **构建入口**：`scripts/gen-assets.ts` 扫描 `web-dist`（开发态回落 `packages/web/dist`），在 `.gen/` 下生成 `assets.ts`（逐个 `import … with { type: 'file' }` 后调用 `setEmbeddedAssets`）和 `entry.ts`（先引 assets 再引 `src/cli.ts`）。`.gen/` 不入库且不在 `tsconfig` 的 `include` 内——否则 `tsc` 会对 Bun 专有的 import attributes 报错。
-- **静态资源三级回退**（`src/assets.ts`）：嵌入表 → 包内 `web-dist` → 仓库 `packages/web/dist`。Bun 嵌入时会扁平化并加 hash（`assets/x-abc.js` → `/$bunfs/root/x-abc-hash.js`），原始相对路径只能靠这张表还原；扩展名保留，`contentTypeFor` 不受影响。
-- **oxfmt 的可选 prettier 插件必须 `--external`**（7 个，见 `scripts/build-binary.ts`）：它们没装，而 bundler 会急切解析惰性 import，否则编译直接失败。
-- **不能交叉编译**：`autocorrect-node` / `oxfmt` 是 NAPI 原生模块，`node_modules` 里只有宿主平台的 `.node`。`--target=bun-linux-x64` 能产出 ELF，但嵌进去的仍是宿主平台的原生模块，一跑就崩。每个目标平台必须在对应 runner 上原生构建。
-- **体积**：约 97 MB（Bun runtime ~60 MB + 前端产物 16 MB + 原生模块）。
-- **服务安装形态自适应**：`serviceArgv()` 在二进制里只用 `process.execPath`，源码形态才拼 `bun + cli.ts`；判据是磁盘上是否存在 `cli.ts`（编译后 `import.meta.dir` 指向虚拟文件系统）。
+Bun 覆盖 macOS / Linux / Windows，daemon 与编辑逻辑本身无平台假设，需要分支的只有三处：
 
-跨平台适配（同批完成）：
+- **开机自启**（`service.ts`）：macOS launchd plist + `launchctl bootstrap`；Linux systemd user unit（`~/.config/systemd/user/md.service`）+ `systemctl --user enable --now`；Windows 计划任务 `schtasks /SC ONLOGON`。不引第三方库（`auto-launch` 一类面向 GUI 应用且久未维护）。`md service plist` 更名为 `md service config`，保留 `plist` 别名。
+- **状态与配置目录**：状态目录 Windows 用 `%LOCALAPPDATA%\md`，其余 `~/.local/state/md`；配置目录优先 `XDG_CONFIG_HOME`，Windows 回落 `%APPDATA%`，其余 `~/.config`。
+- **打开浏览器**：darwin `open`、win32 `cmd /c start ""`（空标题参数不能省，否则 cmd 会把带引号的 URL 当窗口标题）、其余 `xdg-open`。
 
-- **开机自启**（`src/service.ts`）：macOS launchd plist + `launchctl bootstrap`；Linux systemd user unit（`~/.config/systemd/user/md.service`）+ `systemctl --user enable --now`；Windows 计划任务 `schtasks /SC ONLOGON`。不引第三方库（`auto-launch` 一类面向 GUI 应用且久未维护）。`md service plist` 更名为 `md service config`，保留 `plist` 别名。
-- **平台路径**：状态目录 Windows 用 `%LOCALAPPDATA%\md`，其余 `~/.local/state/md`；配置目录优先 `XDG_CONFIG_HOME`，Windows 回落 `%APPDATA%`，其余 `~/.config`。打开浏览器：darwin `open`、win32 `cmd /c start ""`、其余 `xdg-open`。
-- Linux / Windows 的运行时行为未在本机验证，只保证能编译。
+Linux / Windows 的运行时行为未在开发机上验证，只保证类型检查与单元测试通过。
 
 ## 块级链接富展示（embed + 站点卡片，2026-08-13 定稿）
 

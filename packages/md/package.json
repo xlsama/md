@@ -22,11 +22,11 @@
     "oxfmt"
   ],
   "bin": {
-    "md": "./npm/md.cjs"
+    "md": "./src/cli.ts"
   },
   "files": [
-    "npm",
-    "src"
+    "src",
+    "web-dist"
   ],
   "exports": {
     ".": "./src/daemon.ts",
@@ -37,13 +37,10 @@
     "start": "bun run src/cli.ts daemon",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "build:binary": "bun run scripts/build-binary.ts",
-    "pack:npm": "bun run scripts/pack-npm.ts",
-    "inject:optional-deps": "bun run scripts/inject-optional-deps.ts",
-    "prepublishOnly": "cp ../../README.md ../../LICENSE ."
+    "prepublishOnly": "pnpm -w build && rm -rf web-dist && cp -R ../web/dist web-dist && cp ../../README.md ../../LICENSE ."
   },
   "engines": {
-    "node": ">=18"
+    "bun": ">=1.2.0"
   },
   "dependencies": {
     "@hono/zod-validator": "^0.9.0",
