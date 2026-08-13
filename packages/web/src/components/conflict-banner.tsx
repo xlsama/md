@@ -1,34 +1,15 @@
-import { parseDiffFromFile } from '@pierre/diffs';
-import { FileDiff } from '@pierre/diffs/react';
-import { useMemo, useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { basename } from '../lib/paths.ts';
 import { session } from '../session.ts';
-import { useStore, type ConflictState } from '../store.ts';
+import { useStore } from '../store.ts';
 
-function ConflictDiff({ conflict }: { conflict: ConflictState }) {
-  const fileDiff = useMemo(
-    () =>
-      parseDiffFromFile(
-        { name: conflict.path, contents: conflict.diskContent, cacheKey: `disk:${conflict.diskHash}` },
-        { name: conflict.path, contents: conflict.mine }
-      ),
-    [conflict]
-  );
+/** Loaded the first time someone expands a conflict — see `conflict-diff.tsx`. */
+const ConflictDiff = lazy(() => import('./conflict-diff.tsx'));
 
+function DiffFallback() {
   return (
-    <div className="max-h-[45vh] overflow-auto rounded-xl border border-[var(--md-border)]">
-      <FileDiff
-        fileDiff={fileDiff}
-        disableWorkerPool
-        options={{
-          diffStyle: 'split',
-          themeType: 'system',
-          theme: { light: 'github-light', dark: 'github-dark' },
-          overflow: 'wrap',
-          disableFileHeader: true,
-          hunkSeparators: 'simple',
-        }}
-      />
+    <div className="grid h-24 place-items-center rounded-xl border border-[var(--md-border)] text-xs text-[var(--md-muted)]">
+      正在加载对比…
     </div>
   );
 }
@@ -82,7 +63,9 @@ export function ConflictBanner() {
             <span className="flex-1">左：磁盘版本</span>
             <span className="flex-1">右：我的版本</span>
           </div>
-          <ConflictDiff conflict={conflict} />
+          <Suspense fallback={<DiffFallback />}>
+            <ConflictDiff conflict={conflict} />
+          </Suspense>
         </div>
       )}
     </div>

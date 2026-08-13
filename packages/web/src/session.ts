@@ -1,6 +1,7 @@
 import type { ClientMessage, ServerMessage, TreeNode } from 'mdopen/protocol';
 import type { EditorHandle } from '@meowdown/react';
 import { extractToc, sameToc } from './lib/toc.ts';
+import { decideWorkspace, type RouteBridge } from './lib/route.ts';
 import { hasPath } from './lib/tree.ts';
 import {
   classifyExternal,
@@ -11,17 +12,39 @@ import {
 } from './lib/sync.ts';
 import { useStore } from './store.ts';
 
-const SAVE_DEBOUNCE = 500;
 const IDLE_REFLOW = 2000;
 const TOC_DEBOUNCE = 400;
 
+/**
+ * How long a document has to stay unsaved before the file tree says so.
+ *
+ * Comfortably longer than the debounced autosave, so ordinary typing never
+ * paints the marker: what it is left to report is the states that persist —
+ * a save still in flight after a second, a refused write, a conflict. Those two
+ * bypass the wait entirely.
+ */
+const DIRTY_SETTLE = 1000;
+
 type Send = (msg: ClientMessage) => void;
-type TimerName = 'saveTimer' | 'idleTimer' | 'tocTimer';
+type TimerName = 'saveTimer' | 'idleTimer' | 'tocTimer' | 'dirtyTimer';
 
 /**
  * The imperative bridge between the WebSocket protocol and the (uncontrolled)
  * meowdown editor. All the ordering-sensitive rules from DESIGN.md live here;
  * the decisions themselves are pure functions in `lib/sync.ts`.
+ *
+ * **The four names of "the current document".** The same path is spelled four
+ * ways, and every one of them is written from {@link Session.setPath}:
+ *
+ * | where | name | who reads it |
+ * |---|---|---|
+ * | WS protocol | `focus` (server → client), `path` on `open`/`save` | the daemon, which also persists it to `state.json` |
+ * | this class | `this.path` | every guard that drops a reply for a document we already left |
+ * | store | `docPath` | the React tree: tree selection, top bar, editor gating |
+ * | URL | `?file=` | reloads and the per-file scroll cache |
+ *
+ * They can disagree only in the gap between asking for a document and its
+ * content arriving, which is exactly what `docLoading` marks.
  *
  * Invariants:
  * - only one `save` is in flight per document, so a debounced save can never
@@ -34,12 +57,21 @@ type TimerName = 'saveTimer' | 'idleTimer' | 'tocTimer';
 class Session {
   private handle: EditorHandle | null = null;
   private send: Send | null = null;
+  private route: RouteBridge | null = null;
+  /**
+   * `?file` is honoured exactly once, by the first `workspace` message of a
+   * page load. After that the URL is an output of the session, not an input —
+   * a reconnect must not drag the reader back to the file they started on.
+   */
+  private urlPending = true;
 
   private root: string | null = null;
   private path: string | null = null;
   private baseHash = '';
   private dirty = false;
   private saving = false;
+  /** Set when the daemon refused a write; cleared by the next successful one. */
+  private saveFailed = false;
   private sentContent: string | null = null;
   private editedWhileSaving = false;
   private pending: PendingFormatted | null = null;
@@ -52,6 +84,7 @@ class Session {
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private tocTimer: ReturnType<typeof setTimeout> | null = null;
+  private dirtyTimer: ReturnType<typeof setTimeout> | null = null;
 
   attach(handle: EditorHandle | null): void {
     this.handle = handle;
@@ -63,6 +96,10 @@ class Session {
 
   setSend(send: Send | null): void {
     this.send = send;
+  }
+
+  setRoute(route: RouteBridge | null): void {
+    this.route = route;
   }
 
   /**
@@ -82,7 +119,7 @@ class Session {
     this.pending = null;
     this.clearTimer('idleTimer');
     if (this.saving) this.editedWhileSaving = true;
-    useStore.getState().setSaveState('dirty');
+    this.syncDirty();
     this.scheduleSave();
     this.scheduleToc();
   }
@@ -100,11 +137,13 @@ class Session {
   // ----------------------------------------------------------------- files →
 
   open(path: string): void {
-    if (path === this.path) return;
+    if (path === this.path) {
+      this.syncUrl();
+      return;
+    }
     this.flushSave();
     this.maybeReflow('switch');
-    this.resetDoc(path);
-    useStore.getState().setDoc(path, true);
+    this.resetDoc(path, true);
     this.send?.({ type: 'open', path });
   }
 
@@ -116,12 +155,12 @@ class Session {
   rename(from: string, to: string): void {
     if (from === to || to === '') return;
     this.flushSave();
-    if (this.path === from) {
-      this.path = to;
-      useStore.getState().setDoc(to, false);
-    } else if (this.path?.startsWith(`${from}/`) === true) {
-      this.path = `${to}/${this.path.slice(from.length + 1)}`;
-      useStore.getState().setDoc(this.path, false);
+    // The document keeps its content and its place in the editor; only its
+    // name moves, and it moves before the daemon confirms so the UI does not
+    // blink through "no such file".
+    if (this.path === from) this.setPath(to, false);
+    else if (this.path?.startsWith(`${from}/`) === true) {
+      this.setPath(`${to}/${this.path.slice(from.length + 1)}`, false);
     }
     this.send?.({ type: 'rename', from, to });
   }
@@ -144,9 +183,10 @@ class Session {
     this.handle.setState(conflict.diskContent);
     this.baseHash = conflict.diskHash;
     this.dirty = false;
+    this.saveFailed = false;
     this.pending = null;
     state.setConflict(null);
-    state.setSaveState('saved');
+    this.syncDirty();
     this.refreshToc();
   }
 
@@ -159,14 +199,13 @@ class Session {
     this.saving = true;
     this.editedWhileSaving = false;
     state.setConflict(null);
-    state.setSaveState('saving');
+    this.syncDirty();
     this.send?.({ type: 'force-save', path: conflict.path, content });
   }
 
   // ---------------------------------------------------------------- server →
 
   receive(msg: ServerMessage): void {
-    const state = useStore.getState();
     switch (msg.type) {
       case 'workspace':
         this.onWorkspace(msg.root, msg.focus, msg.tree);
@@ -190,8 +229,12 @@ class Session {
       case 'conflict':
         this.onConflict(msg);
         return;
+      case 'settings':
+        useStore.getState().setSettings(msg.settings);
+        return;
       case 'search-results':
-        state.setSearchResults(msg.query, msg.results);
+        // The daemon still answers `search`, but nothing in the UI asks for a
+        // full-text search since the sidebar became a file-name filter.
         return;
       case 'error':
         this.onError(msg.message, msg.op);
@@ -202,6 +245,7 @@ class Session {
   onDisconnect(): void {
     this.saving = false;
     this.clearTimer('saveTimer');
+    this.syncDirty();
     useStore.getState().setConnected(false);
   }
 
@@ -209,24 +253,69 @@ class Session {
 
   private onWorkspace(root: string, focus: string | null, tree: TreeNode[]): void {
     const state = useStore.getState();
-    const rootChanged = this.root !== root;
+    const rootChanged = this.root !== null && this.root !== root;
     this.root = root;
     state.setWorkspace(root, tree);
-    state.setSearchResults(state.searchQuery, []);
 
+    const action = decideWorkspace({
+      rootChanged,
+      urlFile: this.takeUrlFile(),
+      focus,
+      currentPath: this.path,
+      dirty: this.dirty,
+      exists: (path) => hasPath(tree, path),
+    });
+
+    // A switched workspace empties the editor first, so the previous root's
+    // document is not left on screen while the next one loads.
     if (rootChanged) this.closeDoc();
 
-    if (focus !== null && focus !== '') {
-      this.open(focus);
-      return;
+    switch (action.kind) {
+      case 'open':
+        this.open(action.path);
+        break;
+      case 'resync':
+        this.setPath(action.path, true);
+        this.send?.({ type: 'open', path: action.path });
+        break;
+      case 'close':
+        this.closeDoc();
+        break;
+      case 'none':
+        // Nothing to show, so nothing for the URL to name either — this is
+        // where a `?file=` the workspace does not contain gets dropped.
+        this.syncUrl();
+        break;
     }
-    // Same workspace, fresh connection (reconnect): resync the open document,
-    // unless local edits would be clobbered.
-    if (this.path !== null && !this.dirty) {
-      const path = this.path;
-      state.setDoc(path, true);
-      this.send?.({ type: 'open', path });
-    }
+
+    // This message is also the first thing a *reconnect* delivers, and the
+    // socket may well have died with a debounced save still pending — the
+    // daemon never heard about those edits and the editor is now the only
+    // place they exist. Anything still dirty here goes out immediately.
+    if (this.dirty) this.flushSave();
+  }
+
+  private takeUrlFile(): string | null {
+    if (!this.urlPending) return null;
+    this.urlPending = false;
+    return this.route?.readFile() ?? null;
+  }
+
+  /** Pushes the open document into the URL; null clears the parameter. */
+  private syncUrl(): void {
+    this.route?.setFile(this.path);
+  }
+
+  /**
+   * The single writer for "which document is open" — see the table on the
+   * class. Every one of the names is set from here, in this order, because the
+   * store update re-renders components that read the path back out of the
+   * session.
+   */
+  private setPath(path: string | null, loading: boolean): void {
+    this.path = path;
+    useStore.getState().setDoc(path, loading);
+    this.syncUrl();
   }
 
   private onTree(tree: TreeNode[]): void {
@@ -245,13 +334,15 @@ class Session {
     const state = useStore.getState();
     if (op === 'save' || op === 'force-save') {
       this.saving = false;
-      state.setSaveState('error');
+      // A refused write leaves the editor holding the only copy: the tree keeps
+      // its marker until the document is saved or reloaded.
+      this.saveFailed = true;
+      this.syncDirty();
     }
-    if (op === 'search') state.setSearching(false);
-    if (op === 'open') {
-      this.resetDoc(null);
-      state.setDoc(null, false);
-    }
+    if (op === 'open') this.resetDoc(null);
+    // The file was never made, so the tree will never announce it — without
+    // this the session would open whatever file happens to appear next.
+    if (op === 'create') this.pendingOpen = null;
     state.pushToast(op === undefined ? message : `${op}：${message}`, 'error');
   }
 
@@ -267,13 +358,14 @@ class Session {
     this.sentContent = null;
     this.editedWhileSaving = false;
     this.pending = null;
+    this.saveFailed = false;
     this.clearTimer('idleTimer');
     this.clearTimer('saveTimer');
+    this.syncDirty();
     this.handle.setState(file.content, 'start');
-    const state = useStore.getState();
-    state.setDoc(file.path, false);
-    state.setSaveState('idle');
-    state.setConflict(null);
+    this.releaseEditorFocus();
+    useStore.getState().setConflict(null);
+    this.setPath(file.path, false);
     this.refreshToc();
   }
 
@@ -291,16 +383,17 @@ class Session {
       msg
     );
     this.saving = false;
+    this.saveFailed = false;
     this.baseHash = outcome.baseHash;
     this.dirty = outcome.dirty;
     this.pending = outcome.pending;
     this.editedWhileSaving = false;
+    this.syncDirty();
 
     if (outcome.resave) {
       this.flushSave();
       return;
     }
-    useStore.getState().setSaveState('saved');
     if (this.pending !== null) this.scheduleIdleReflow();
   }
 
@@ -327,7 +420,6 @@ class Session {
         this.baseHash = msg.hash;
         this.pending = null;
         this.clearTimer('idleTimer');
-        state.setSaveState('saved');
         this.refreshToc();
         return;
       case 'conflict':
@@ -337,6 +429,7 @@ class Session {
           diskHash: msg.hash,
           mine: this.handle.getMarkdown(),
         });
+        this.syncDirty();
         return;
     }
   }
@@ -351,19 +444,35 @@ class Session {
       diskHash: msg.diskHash,
       mine: this.sentContent ?? this.handle.getMarkdown(),
     });
-    state.setSaveState('dirty');
+    this.syncDirty();
   }
 
   private closeDoc(): void {
     this.resetDoc(null);
-    const state = useStore.getState();
-    state.setDoc(null, false);
-    state.setToc([]);
-    state.setSaveState('idle');
+    useStore.getState().setToc([]);
     this.handle?.setState('', 'start');
+    this.releaseEditorFocus();
   }
 
-  private resetDoc(path: string | null): void {
+  /**
+   * Hands focus back after a document is swapped in.
+   *
+   * ProseMirror always has a selection, and meowdown reveals the markdown
+   * syntax around it, so a freshly loaded document would otherwise open with
+   * the first heading's `#`/`**` exposed. The selection stays at the start
+   * (that is what scrolls the new document to the top), but with the editor
+   * unfocused there is no caret and the `:focus-within` rule in `index.css`
+   * keeps the syntax hidden until the reader clicks into the text.
+   *
+   * Only the load path calls this: an in-place reflow or a conflict
+   * resolution must never steal focus away from someone who is typing.
+   */
+  private releaseEditorFocus(): void {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active.closest('.md-editor-host') !== null) active.blur();
+  }
+
+  private resetDoc(path: string | null, loading = false): void {
     this.clearTimer('saveTimer');
     this.clearTimer('idleTimer');
     this.clearTimer('tocTimer');
@@ -374,8 +483,59 @@ class Session {
     this.sentContent = null;
     this.editedWhileSaving = false;
     this.pending = null;
+    this.saveFailed = false;
     this.queuedLoad = null;
     useStore.getState().setConflict(null);
+    this.syncDirty();
+    this.setPath(path, loading);
+  }
+
+  /** Whether the open document differs from what is on disk, right now. */
+  private unsettled(): boolean {
+    return (
+      this.dirty || this.saving || this.saveFailed || useStore.getState().conflict !== null
+    );
+  }
+
+  /**
+   * Mirrors "the open document is not what is on disk" onto the store, which is
+   * what paints the marker in the file tree.
+   *
+   * One editor means at most one such document at a time, so this is a single
+   * path rather than a set.
+   *
+   * Raising the marker waits out {@link DIRTY_SETTLE} first. Under the debounced
+   * autosave every keystroke would otherwise raise it and the next save clear
+   * it again — a dot blinking on and off beside the file name while someone
+   * types, and (worse) a full repaint of the tree rows behind it on each
+   * change, since the tree exposes no cheaper way to redraw a decoration.
+   * Waiting means only the states that actually persist ever paint.
+   *
+   * Two do not wait: a refused write and a conflict are both stuck until the
+   * reader does something, and both are worth saying immediately. Clearing
+   * never waits either.
+   */
+  private syncDirty(): void {
+    const state = useStore.getState();
+    const urgent = this.saveFailed || state.conflict !== null;
+    const next = this.unsettled() ? this.path : null;
+
+    if (next === null || urgent) {
+      this.clearTimer('dirtyTimer');
+      if (state.dirtyPath !== next) state.setDirtyPath(next);
+      return;
+    }
+    if (state.dirtyPath === next) {
+      this.clearTimer('dirtyTimer');
+      return;
+    }
+    if (this.dirtyTimer !== null) return;
+    this.dirtyTimer = setTimeout(() => {
+      this.dirtyTimer = null;
+      const current = useStore.getState();
+      const path = this.unsettled() ? this.path : null;
+      if (current.dirtyPath !== path) current.setDirtyPath(path);
+    }, DIRTY_SETTLE);
   }
 
   private scheduleSave(): void {
@@ -383,7 +543,7 @@ class Session {
     this.saveTimer = setTimeout(() => {
       this.saveTimer = null;
       this.flushSave();
-    }, SAVE_DEBOUNCE);
+    }, useStore.getState().settings.saveDebounceMs);
   }
 
   private flushSave(): void {
@@ -398,7 +558,6 @@ class Session {
     this.sentContent = content;
     this.editedWhileSaving = false;
     this.saving = true;
-    useStore.getState().setSaveState('saving');
     this.send?.({ type: 'save', path: this.path, content, baseHash: this.baseHash });
   }
 

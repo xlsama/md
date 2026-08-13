@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { homedir } from 'node:os';
-import { ensureStateDir, logPath, stateDir } from './state.ts';
+import { ensureStateDir, logPath } from './state.ts';
 
 export const SERVICE_LABEL = 'dev.md.daemon';
 
@@ -110,8 +110,4 @@ export async function uninstallService(): Promise<string> {
   await launchctl(['bootout', `${domainTarget()}/${SERVICE_LABEL}`]);
   await fs.rm(target, { force: true });
   return target;
-}
-
-export function serviceInfo(): { label: string; plist: string; state: string; log: string } {
-  return { label: SERVICE_LABEL, plist: plistPath(), state: stateDir(), log: logPath() };
 }

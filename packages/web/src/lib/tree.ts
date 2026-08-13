@@ -1,5 +1,5 @@
 import type { TreeNode } from 'mdopen/protocol';
-import { basename, isMarkdownPath, stripExtension } from './paths.ts';
+import { basename, isMarkdown, stripExtension } from './paths.ts';
 
 /**
  * Flattens the daemon's tree into the path list `@pierre/trees` consumes.
@@ -77,7 +77,7 @@ export function collectFiles(tree: readonly TreeNode[]): string[] {
 }
 
 export function markdownFiles(tree: readonly TreeNode[]): string[] {
-  return collectFiles(tree).filter(isMarkdownPath);
+  return collectFiles(tree).filter(isMarkdown);
 }
 
 /** Directory paths, plus `''` for the workspace root. */

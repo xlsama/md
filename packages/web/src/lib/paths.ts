@@ -28,9 +28,24 @@ export function stripExtension(p: string): string {
   return idx <= 0 ? name : name.slice(0, idx);
 }
 
-export function isMarkdownPath(p: string): boolean {
+/** Same name, same rule as the daemon's `isMarkdown` in `packages/md/src/files.ts`. */
+export function isMarkdown(p: string): boolean {
   const ext = extname(p).toLowerCase();
   return ext === '.md' || ext === '.markdown';
+}
+
+/**
+ * The name a new note is actually created under.
+ *
+ * The daemon only creates markdown files, so a name typed without an extension
+ * would be rejected outright — supplying the one the user obviously meant is
+ * friendlier than an error. A name that already ends in `.md`/`.markdown` is
+ * left exactly as typed; any other extension is kept and `.md` appended, so
+ * `notes.2024` stays recognisable as `notes.2024.md`.
+ */
+export function withMarkdownExtension(name: string): string {
+  const trimmed = name.trim();
+  return trimmed === '' || isMarkdown(trimmed) ? trimmed : `${trimmed}.md`;
 }
 
 /** Collapses `.` / `..` segments. Leading `..` that escape the root are dropped. */

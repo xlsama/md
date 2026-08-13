@@ -3,16 +3,18 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import pkg from '../package.json';
+import { healthResponseSchema, type HealthResponse } from '../src/protocol.ts';
 
 const SRC = path.resolve(import.meta.dir, '..', 'src');
 
-async function fetchHealth(port: number): Promise<{ pid: number; version: string } | null> {
+async function fetchHealth(port: number): Promise<HealthResponse | null> {
   try {
     const res = await fetch(`http://127.0.0.1:${port}/api/health`, {
       signal: AbortSignal.timeout(500),
     });
     if (!res.ok) return null;
-    return (await res.json()) as { pid: number; version: string };
+    const parsed = healthResponseSchema.safeParse(await res.json());
+    return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }

@@ -55,8 +55,11 @@ export function MenuSeparator() {
  * runs in the capture phase so a click that lands on another interactive
  * element still dismisses the menu first.
  */
-export function useDismiss(open: boolean, close: () => void) {
-  const ref = useRef<HTMLDivElement>(null);
+export function useDismiss<T extends HTMLElement = HTMLDivElement>(
+  open: boolean,
+  close: () => void
+) {
+  const ref = useRef<T>(null);
 
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {

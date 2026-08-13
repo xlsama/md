@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { basename, dirname, isMarkdownPath, join } from '../lib/paths.ts';
+import { basename, dirname, join, withMarkdownExtension } from '../lib/paths.ts';
 import { session } from '../session.ts';
 import { useStore, type Dialog } from '../store.ts';
 
@@ -146,23 +146,6 @@ export function Dialogs() {
 
   if (dialog.kind === 'delete') return <DeleteForm dialog={dialog} onClose={close} />;
 
-  if (dialog.kind === 'create') {
-    const isFile = dialog.entry === 'file';
-    return (
-      <NameForm
-        title={isFile ? '新建文件' : '新建文件夹'}
-        hint={dialog.parent === '' ? '创建在工作区根目录' : `创建在 ${dialog.parent}/`}
-        initial={isFile ? '未命名.md' : '新建文件夹'}
-        confirmLabel="创建"
-        onClose={close}
-        onSubmit={(name) => {
-          const finalName = isFile && !isMarkdownPath(name) ? `${name}.md` : name;
-          session.create(join(dialog.parent, finalName), dialog.entry);
-        }}
-      />
-    );
-  }
-
   return (
     <NameForm
       title="重命名"
@@ -171,7 +154,7 @@ export function Dialogs() {
       confirmLabel="重命名"
       onClose={close}
       onSubmit={(name) => {
-        const finalName = !dialog.isDir && !isMarkdownPath(name) ? `${name}.md` : name;
+        const finalName = dialog.isDir ? name : withMarkdownExtension(name);
         session.rename(dialog.path, join(dirname(dialog.path), finalName));
       }}
     />

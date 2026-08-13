@@ -84,6 +84,80 @@ export const errorMessageSchema = z.object({
   op: z.string().optional(),
 });
 
+export const themeSchema = z.enum(['system', 'light', 'dark']);
+export type Theme = z.infer<typeof themeSchema>;
+
+export const SAVE_DEBOUNCE_MIN = 100;
+export const SAVE_DEBOUNCE_MAX = 5000;
+
+/**
+ * Whether a string is usable as the per-document image folder: exactly one path
+ * segment, so an asset can never be written outside the document's own
+ * directory.
+ */
+export function isAssetsDirName(value: string): boolean {
+  if (value.length === 0 || value.length > 64) return false;
+  if (value !== value.trim()) return false;
+  if (value === '.' || value === '..') return false;
+  return !/[/\\\0]/.test(value);
+}
+
+const assetsDirSchema = z.string().refine(isAssetsDirName, '图片目录名必须是单段合法目录名');
+const saveDebounceMsSchema = z.number().int().min(SAVE_DEBOUNCE_MIN).max(SAVE_DEBOUNCE_MAX);
+
+/**
+ * The settings file as it is *read*: every field falls back to its default, so
+ * a hand-edited file that lost a key — or gained a nonsense value — still
+ * yields a complete, usable configuration instead of an error.
+ *
+ * `settingsPatchSchema` below is the strict counterpart used by `PUT`, where a
+ * bad value has to be refused rather than quietly replaced.
+ */
+export const settingsSchema = z.object({
+  theme: themeSchema.catch('system'),
+  format: z
+    .object({
+      autocorrect: z.boolean().catch(true),
+      oxfmt: z.boolean().catch(true),
+    })
+    .catch({ autocorrect: true, oxfmt: true }),
+  assetsDir: assetsDirSchema.catch('assets'),
+  linkEmbeds: z.boolean().catch(true),
+  saveDebounceMs: saveDebounceMsSchema.catch(500),
+  /**
+   * UI state rather than a preference, but it lives here so the sidebar is in
+   * the same shape on the next launch. Deliberately absent from the settings
+   * dialog.
+   */
+  sidebarOpen: z.boolean().catch(false),
+});
+
+export type Settings = z.infer<typeof settingsSchema>;
+
+export const DEFAULT_SETTINGS: Settings = settingsSchema.parse({});
+
+/** A partial update: only the fields present are changed. */
+export const settingsPatchSchema = z.object({
+  theme: themeSchema.optional(),
+  format: z
+    .object({
+      autocorrect: z.boolean().optional(),
+      oxfmt: z.boolean().optional(),
+    })
+    .optional(),
+  assetsDir: assetsDirSchema.optional(),
+  linkEmbeds: z.boolean().optional(),
+  saveDebounceMs: saveDebounceMsSchema.optional(),
+  sidebarOpen: z.boolean().optional(),
+});
+
+export type SettingsPatch = z.infer<typeof settingsPatchSchema>;
+
+export const settingsMessageSchema = z.object({
+  type: z.literal('settings'),
+  settings: settingsSchema,
+});
+
 export const serverMessageSchema = z.discriminatedUnion('type', [
   workspaceMessageSchema,
   treeMessageSchema,
@@ -93,6 +167,7 @@ export const serverMessageSchema = z.discriminatedUnion('type', [
   conflictMessageSchema,
   externalMessageSchema,
   searchResultsMessageSchema,
+  settingsMessageSchema,
   errorMessageSchema,
 ]);
 
@@ -157,25 +232,79 @@ export type ClientMessageOf<T extends ClientMessageType> = Extract<ClientMessage
 export const openRequestSchema = z.object({ path: z.string() });
 export type OpenRequest = z.infer<typeof openRequestSchema>;
 
-export interface HealthResponse {
-  pid: number;
-  version: string;
-  workspace: string | null;
-  clients: number;
-  ripgrep: boolean;
-}
+export const linkMetaQuerySchema = z.object({ url: z.string().min(1) });
+export type LinkMetaQuery = z.infer<typeof linkMetaQuerySchema>;
 
-export interface OpenResponse {
-  url: string;
-  clients: number;
-  root: string;
-  focus: string | null;
-}
+/** Everything a link card renders, all of it optional except the identity. */
+export const linkMetaSchema = z.object({
+  /** Final URL after redirects — what the card actually describes. */
+  url: z.string(),
+  /** `www.`-stripped hostname, shown next to the favicon. */
+  domain: z.string(),
+  title: z.string().nullable(),
+  description: z.string().nullable(),
+  image: z.string().nullable(),
+  favicon: z.string().nullable(),
+  siteName: z.string().nullable(),
+});
 
-export interface AssetResponse {
-  relativePath: string;
-  workspacePath: string;
-}
+export type LinkMeta = z.infer<typeof linkMetaSchema>;
+
+/**
+ * `GET /api/link-meta` answers 200 either way: a page we could not read is a
+ * normal outcome that renders the minimal card, not a request-level error.
+ * Only a URL we refuse to fetch at all (bad scheme, private host) is a 400.
+ */
+export const linkMetaResponseSchema = z.discriminatedUnion('ok', [
+  z.object({ ok: z.literal(true), meta: linkMetaSchema }),
+  z.object({ ok: z.literal(false), error: z.string() }),
+]);
+
+export type LinkMetaResponse = z.infer<typeof linkMetaResponseSchema>;
+
+/**
+ * `GET /api/health`. Beyond liveness it reports the two capabilities that can
+ * be missing at runtime — ripgrep on `PATH`, and a live filesystem watcher —
+ * so the CLI and the browser can both say what is degraded rather than
+ * behaving oddly.
+ */
+export const healthResponseSchema = z.object({
+  pid: z.number(),
+  version: z.string(),
+  workspace: z.string().nullable(),
+  clients: z.number(),
+  /**
+   * Both capabilities default rather than failing the parse: `md` upgrades
+   * itself by asking an older daemon for its version, and a schema that refused
+   * a response predating these fields would read that daemon as "not running"
+   * and try to start a second one on the same port.
+   */
+  ripgrep: z.boolean().catch(false),
+  watching: z.boolean().catch(false),
+});
+
+export type HealthResponse = z.infer<typeof healthResponseSchema>;
+
+export const openResponseSchema = z.object({
+  url: z.string(),
+  clients: z.number(),
+  root: z.string(),
+  focus: z.string().nullable(),
+});
+
+export type OpenResponse = z.infer<typeof openResponseSchema>;
+
+/**
+ * `POST /api/assets`. `relativePath` is relative to the document (what goes
+ * into the markdown); `workspacePath` is relative to the workspace root (what
+ * `/raw/` serves).
+ */
+export const assetResponseSchema = z.object({
+  relativePath: z.string(),
+  workspacePath: z.string(),
+});
+
+export type AssetResponse = z.infer<typeof assetResponseSchema>;
 
 export function parseClientMessage(raw: string): { ok: true; value: ClientMessage } | { ok: false; error: string } {
   let json: unknown;

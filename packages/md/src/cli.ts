@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import pkg from '../package.json';
-import type { HealthResponse, OpenResponse } from './protocol.ts';
+import { healthResponseSchema, openResponseSchema, type HealthResponse } from './protocol.ts';
 import { ensureStateDir, logPath, readState, resolvePort } from './state.ts';
 import { runDaemonForeground } from './daemon.ts';
 import { buildPlist, defaultPlistOptions, installService, plistPath, uninstallService } from './service.ts';
@@ -68,7 +68,8 @@ async function fetchHealth(port: number, timeoutMs = 800): Promise<HealthRespons
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) return null;
-    return (await res.json()) as HealthResponse;
+    const parsed = healthResponseSchema.safeParse(await res.json());
+    return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }
@@ -105,7 +106,8 @@ async function restartDaemon(port: number, pid: number): Promise<HealthResponse 
   const deadline = Date.now() + 4000;
   while (Date.now() < deadline) {
     const health = await fetchHealth(port, 400);
-    // launchd（KeepAlive）可能已用新代码拉起；没有 launchd 时进程消失后由我们自己拉
+    // launchd (KeepAlive) may already have brought the new code back up; with
+    // no launchd around, the process simply stays gone and we start it here.
     if (health?.version === pkg.version) return health;
     if (!health) {
       await spawnDaemon(port);
@@ -158,7 +160,7 @@ async function commandOpen(target: string | undefined, port: number): Promise<vo
       body && typeof body === 'object' && 'error' in body ? String((body).error) : res.statusText;
     fail(`open failed: ${message}`);
   }
-  const data = (await res.json()) as OpenResponse;
+  const data = openResponseSchema.parse(await res.json());
   if (data.clients === 0 && process.env['MD_NO_OPEN'] !== '1') {
     await openBrowser(data.url);
     console.log(`md: opened ${data.url}`);

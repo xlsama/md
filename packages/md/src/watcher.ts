@@ -30,10 +30,15 @@ export class Watcher {
   }
 
   private schedule(filename: string | Buffer | null): void {
+    const rel = filename === null || filename === undefined
+      ? ''
+      : toPosix(typeof filename === 'string' ? filename : filename.toString('utf8'));
+    // Churn under `.git/`, `node_modules/` or any dotted path can never change
+    // the tree, so it must not cost a full rescan either — a rebase or an
+    // install would otherwise rescan the workspace hundreds of times.
+    if (rel !== '' && isExcludedRelPath(rel)) return;
     this.scheduleAny();
-    if (!filename) return;
-    const rel = toPosix(typeof filename === 'string' ? filename : filename.toString('utf8'));
-    if (!rel || isExcludedRelPath(rel)) return;
+    if (rel === '') return;
     const existing = this.timers.get(rel);
     if (existing) clearTimeout(existing);
     this.timers.set(

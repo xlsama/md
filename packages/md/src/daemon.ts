@@ -7,11 +7,15 @@ import { zValidator } from '@hono/zod-validator';
 import type { Server, ServerWebSocket } from 'bun';
 import pkg from '../package.json';
 import {
+  linkMetaQuerySchema,
   openRequestSchema,
   parseClientMessage,
+  settingsPatchSchema,
   type ClientMessage,
   type ServerMessage,
 } from './protocol.ts';
+import { getSettings, loadSettings, updateSettings } from './settings.ts';
+import { LinkMetaCache, LinkTargetError, normalizeLinkUrl, type LinkMetaCacheOptions } from './link-meta.ts';
 import {
   createEntry,
   deleteEntry,
@@ -35,6 +39,14 @@ export interface DaemonOptions {
   persistState?: boolean;
   writePidFile?: boolean;
   version?: string;
+  /** Overrides for the link-card metadata cache; tests inject a fake fetcher. */
+  linkMeta?: LinkMetaCacheOptions;
+  /**
+   * The formatting pipeline a save runs through. Only tests replace it — with a
+   * deliberately slow one, to open the window between "the disk was checked"
+   * and "the disk is written" that the second hash check has to cover.
+   */
+  format?: typeof formatMarkdown;
 }
 
 interface WSData {
@@ -48,6 +60,8 @@ interface DaemonContext {
   clients: Set<MdSocket>;
   webDist: string;
   version: string;
+  linkMeta: LinkMetaCache;
+  format: typeof formatMarkdown;
   broadcast: (msg: ServerMessage) => void;
   send: (ws: MdSocket, msg: ServerMessage) => void;
   sendOthers: (ws: MdSocket, msg: ServerMessage) => void;
@@ -63,7 +77,9 @@ export interface DaemonHandle {
   stop: () => Promise<void>;
 }
 
-// npm 包内嵌 web-dist（prepublishOnly 拷入）；仓库开发态回退到 packages/web/dist
+// The npm package ships `web-dist` (copied in by `prepublishOnly`); inside the
+// repository that directory does not exist, so development falls back to
+// `packages/web/dist`.
 const PACKAGED_WEB_DIST = path.resolve(import.meta.dir, '..', 'web-dist');
 const DEV_WEB_DIST = path.resolve(import.meta.dir, '..', '..', 'web', 'dist');
 const DEFAULT_WEB_DIST = existsSync(PACKAGED_WEB_DIST) ? PACKAGED_WEB_DIST : DEV_WEB_DIST;
@@ -123,6 +139,7 @@ function createRoutes(ctx: DaemonContext) {
         workspace: ctx.workspace.root,
         clients: ctx.clients.size,
         ripgrep: hasRipgrep(),
+        watching: ctx.workspace.watching,
       })
     )
     .post('/api/open', zValidator('json', openRequestSchema), async (c) => {
@@ -145,6 +162,18 @@ function createRoutes(ctx: DaemonContext) {
         return c.json({ error: errorMessage(err) }, 400);
       }
     })
+    .get('/api/settings', (c) => c.json(getSettings()))
+    .put('/api/settings', zValidator('json', settingsPatchSchema), async (c) => {
+      try {
+        const settings = await updateSettings(c.req.valid('json'));
+        // Every page applies the new settings straight away — including the one
+        // that did not send the change.
+        ctx.broadcast({ type: 'settings', settings });
+        return c.json(settings);
+      } catch (err) {
+        return c.json({ error: errorMessage(err) }, 500);
+      }
+    })
     .post('/api/assets', async (c) => {
       try {
         ctx.workspace.requireRoot();
@@ -156,7 +185,7 @@ function createRoutes(ctx: DaemonContext) {
         const docDir = docPath ? path.posix.dirname(docPath) : '.';
         const dirPrefix = docDir === '.' || docDir === '' ? '' : `${docDir}/`;
         const name = `${timestampPrefix()}-${sanitizeAssetName(file.name)}`;
-        const relativePath = `assets/${name}`;
+        const relativePath = `${getSettings().assetsDir}/${name}`;
         const workspacePath = `${dirPrefix}${relativePath}`;
         const abs = await ctx.workspace.resolve(workspacePath);
         await fs.mkdir(path.dirname(abs), { recursive: true });
@@ -166,6 +195,21 @@ function createRoutes(ctx: DaemonContext) {
         const status = err instanceof PathViolationError ? 403 : 400;
         return c.json({ error: errorMessage(err) }, status);
       }
+    })
+    .get('/api/link-meta', zValidator('query', linkMetaQuerySchema), async (c) => {
+      const { url } = c.req.valid('query');
+      let target: URL;
+      try {
+        target = normalizeLinkUrl(url, { allowPrivateHosts: ctx.linkMeta.allowPrivateHosts });
+      } catch (err) {
+        const status = err instanceof LinkTargetError ? 400 : 500;
+        return c.json({ error: errorMessage(err) }, status);
+      }
+      const body = await ctx.linkMeta.get(target.toString());
+      // The daemon owns the TTL; letting the browser cache too would make a
+      // failed card impossible to retry without a hard reload.
+      c.header('cache-control', 'no-store');
+      return c.json(body);
     })
     .get('/raw/*', async (c) => {
       if (!ctx.workspace.root) return c.json({ error: 'no workspace open' }, 409);
@@ -227,8 +271,6 @@ async function serveWebAsset(dist: string, pathname: string): Promise<Response |
   });
 }
 
-export type AppType = ReturnType<typeof createRoutes>;
-
 async function handleMessage(ctx: DaemonContext, ws: MdSocket, msg: ClientMessage): Promise<void> {
   switch (msg.type) {
     case 'open': {
@@ -242,16 +284,30 @@ async function handleMessage(ctx: DaemonContext, ws: MdSocket, msg: ClientMessag
       const rel = msg.path;
       if (!isMarkdown(rel)) throw new Error('only markdown files can be saved');
       const disk = await ctx.workspace.diskState(rel);
-      if (msg.type === 'save' && disk.hash !== msg.baseHash) {
+      const conflict = (state: { content: string; hash: string }): void => {
         ctx.send(ws, {
           type: 'conflict',
           path: rel,
-          diskContent: disk.content,
-          diskHash: disk.hash,
+          diskContent: state.content,
+          diskHash: state.hash,
         });
+      };
+      if (msg.type === 'save' && disk.hash !== msg.baseHash) {
+        conflict(disk);
         return;
       }
-      const formatted = await formatMarkdown(disk.abs, msg.content);
+      const formatted = await ctx.format(disk.abs, msg.content, getSettings().format);
+      if (msg.type === 'save') {
+        // Formatting is asynchronous and can take long enough for an agent to
+        // land a write of its own in the meantime. Checking the disk once more
+        // right before the write closes that window: the alternative is
+        // silently overwriting an edit that was made after we looked.
+        const now = await ctx.workspace.diskState(rel);
+        if (now.hash !== msg.baseHash) {
+          conflict(now);
+          return;
+        }
+      }
       const written = await ctx.workspace.writeFormatted(rel, disk.abs, formatted);
       ctx.send(ws, { type: 'saved', path: rel, content: written.content, hash: written.hash });
       ctx.sendOthers(ws, {
@@ -298,6 +354,7 @@ async function handleMessage(ctx: DaemonContext, ws: MdSocket, msg: ClientMessag
 }
 
 export async function startDaemon(options: DaemonOptions = {}): Promise<DaemonHandle> {
+  await loadSettings();
   const clients = new Set<MdSocket>();
   const webDist = options.webDist ?? DEFAULT_WEB_DIST;
   let server: Server<WSData> | null = null;
@@ -318,6 +375,8 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<DaemonHa
     clients,
     webDist,
     version: options.version ?? pkg.version,
+    linkMeta: new LinkMetaCache(options.linkMeta),
+    format: options.format ?? formatMarkdown,
     broadcast,
     send: (ws, msg) => {
       try {
@@ -355,6 +414,9 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<DaemonHa
       open(ws) {
         clients.add(ws);
         ctx.send(ws, workspace.workspaceMessage());
+        // Sent unprompted so a page can theme itself and size its save debounce
+        // from the first frame, without a second round trip over HTTP.
+        ctx.send(ws, { type: 'settings', settings: getSettings() });
       },
       close(ws) {
         clients.delete(ws);
@@ -378,6 +440,10 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<DaemonHa
   if (options.root) {
     await workspace.setRoot(options.root, options.focus ?? null, options.persistState !== false);
   }
+
+  // Shards for pages nobody has looked at in a week are dead weight; clearing
+  // them on start keeps the cache directory from growing without bound.
+  void ctx.linkMeta.sweepExpired();
 
   if (options.writePidFile) await writePid(process.pid).catch(() => {});
 

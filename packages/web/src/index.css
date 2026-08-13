@@ -12,6 +12,30 @@
   /* Drives the light-dark() colors used by the meowdown stylesheets. */
   color-scheme: light dark;
 
+  /* Text column: the measure everything in the document is laid out against,
+     plus the gutter that keeps it off the panel edges. */
+  --md-measure: 780px;
+  --md-gutter: 2rem;
+  /* Every block-level medium — link cards, embeds, images — shares one width so
+     their left and right edges line up down the column. Narrower than the
+     measure on purpose: a picture the full width of the text pulls the eye off
+     the prose, and 390px keeps a screenshot readable without becoming the page.
+     An image the reader has dragged to a size of their own keeps it, capped by
+     the column (`max-width: 100%` on the resizable root).
+     Two spellings because a `min-width` cannot use the percentage one: the
+     preview wrapper meowdown puts around an image is a shrink-to-fit
+     inline-block, so a percentage there has no definite width to resolve
+     against and collapses the box to its content. */
+  --md-media-max: 390px;
+  --md-media-width: min(var(--md-media-max), 100%);
+  /* Space kept clear on the right for the docked outline, which floats over the
+     text rather than displacing it. Set from the app shell. */
+  --md-toc-reserve: 0px;
+  /* Matches the ::-webkit-scrollbar width at the bottom of this file. */
+  --md-scrollbar: 10px;
+  /* The unsaved / unresolved marker in the file tree. */
+  --md-dirty: light-dark(oklch(76.9% 0.163 70.1), oklch(82.8% 0.152 84.4));
+
   --md-bg: light-dark(oklch(99% 0 0), oklch(17.5% 0.005 286));
   --md-panel: light-dark(oklch(98% 0.002 286), oklch(21% 0.006 286));
   --md-border: light-dark(oklch(92.5% 0.004 286), oklch(30% 0.008 286));
@@ -30,6 +54,47 @@
   );
   --md-tooltip-bg: light-dark(oklch(26% 0.008 286), oklch(30% 0.008 286));
   --md-tooltip-fg: light-dark(oklch(98% 0 0), oklch(95% 0.003 286));
+
+  /* Frosted panel that floats over the text instead of displacing it. The
+     alpha has to stay low enough for the blur behind it to be visible. */
+  --md-glass-bg: light-dark(oklch(100% 0 0 / 0.72), oklch(24% 0.006 286 / 0.72));
+  --md-glass-border: light-dark(oklch(89% 0.004 286 / 0.9), oklch(38% 0.009 286 / 0.85));
+
+  /* Body copy in the editor. meowdown ships text two steps away from its
+     heading colour in both schemes, which reads as grey; pulling body copy to
+     ~22% black / ~93% white puts it where long-form reading wants it while
+     staying clear of the pure extremes that would glare. Headings keep their
+     own values, so the hierarchy survives. Declared outside any cascade layer,
+     so it outranks `@layer meowdown.theme`. */
+  --meowdown-text: light-dark(oklch(22% 0.012 286), oklch(93.5% 0.004 286));
+
+  /* Image loading skeleton and failure card. */
+  --md-skeleton-bg: light-dark(oklch(91.5% 0.005 286), oklch(25.5% 0.007 286));
+  --md-skeleton-border: light-dark(oklch(88% 0.006 286), oklch(31% 0.008 286));
+  --md-skeleton-sheen: light-dark(oklch(100% 0 0 / 0.95), oklch(42% 0.011 286 / 0.85));
+}
+
+/* ----------------------------------------------------------------- theming
+   Every color in the app is one half of a `light-dark()` pair, and that pair is
+   resolved against the *used* `color-scheme` — ours, meowdown's and @pierre's
+   alike. Pinning the scheme on the document element therefore switches all
+   three at once, and `theme: system` simply removes the attribute so
+   `prefers-color-scheme` decides again.
+
+   The `:where(*)` half is not decorative: @pierre/trees and @pierre/diffs each
+   re-declare `color-scheme: light dark` on their own `:host`, which would keep
+   those shadow roots following the OS while the rest of the app is forced.
+   Rules from the outer tree outrank `:host`, so re-stating the scheme on every
+   element pins them too. `color-scheme` is inherited, so this changes nothing
+   anywhere else. */
+:root[data-theme='light'],
+:root[data-theme='light'] :where(*) {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'],
+:root[data-theme='dark'] :where(*) {
+  color-scheme: dark;
 }
 
 html,
@@ -46,13 +111,35 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* The editor column owns the vertical scroll; the editor fills it exactly so a
-   short document does not grow a scrollbar, and clicking the empty space below
-   the last line still lands in the document. */
+/* The editor column owns the vertical scroll and runs all the way to the right
+   edge of the window, so its scrollbar reads as the page's scrollbar. The
+   docked outline floats over the right end of that column instead of taking a
+   column of its own, and reserves its space through padding — which keeps the
+   scrollbar where it is while the text column re-centres in what is left. */
+.md-editor-host {
+  padding-inline-end: var(--md-toc-reserve);
+  transition: padding 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* The editor fills the column exactly, so a short document does not grow a
+   scrollbar and clicking the empty space below the last line still lands in
+   the document. `--meowdown-gutter` is meowdown's own text inset, tied to ours
+   so the measure below describes the text and not the padding. */
 .md-editor-host .meowdown {
+  --meowdown-gutter: var(--md-gutter);
   display: flex;
   min-height: 100%;
   flex-direction: column;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: calc(var(--md-measure) + 2 * var(--md-gutter));
+  margin-inline: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .md-editor-host {
+    transition: none;
+  }
 }
 
 .md-editor-host .meowdown-content {
@@ -66,9 +153,405 @@ body {
   flex: 1;
 }
 
-/* Pierre trees renders into a shadow root; align it with our palette. */
+/* Body copy runs at 14px while headings and code blocks keep the sizes
+   meowdown ships. The root `.ProseMirror` font-size is deliberately left at
+   17px: headings are sized in `rem` so they would not follow it anyway, but
+   the code block's `0.9em` and the `1lh` list-marker geometry both hang off
+   whatever their own box inherits. Overriding the text blocks instead keeps
+   code exactly where it was, and `line-height: 1.7` is a unitless inherited
+   number, so the leading rescales with the text on its own (23.8px).
+   `.prosemirror-flat-list` is the list item itself — meowdown renders flat
+   lists as divs — and it has to be in the set so the bullet, which is sized
+   in `lh`, stays centred on the first line of its text. */
+.md-editor-host .ProseMirror :is(p, blockquote, table, .prosemirror-flat-list) {
+  font-size: 0.9375rem;
+}
+
+/* Code sits a step below body copy so a fenced block reads as an inset rather
+   than as louder prose. Inline code keeps meowdown's `0.9em`, so it rescales
+   with whatever text box it lands in. */
+.md-editor-host .ProseMirror pre {
+  font-size: 0.875rem;
+}
+
+/* A rule is a section break, not a paragraph break: a touch more air than the
+   0.85em between blocks, far less than the default it shipped with. */
+.md-editor-host .ProseMirror hr {
+  margin-block: 1rem;
+}
+
+/* Consecutive list items sit closer together than the `0.85em` that separates
+   ordinary blocks: a list reads as one unit, and the gap it inherited made
+   three bullets look like three paragraphs. Only the `+` pair is tightened,
+   so the space between a list and the prose around it is untouched. */
+.md-editor-host .ProseMirror > .prosemirror-flat-list + .prosemirror-flat-list {
+  margin-top: 0.55em;
+}
+
+/* The same breathing room one level down. Only *adjacent* nested items are
+   touched, so the gap between a parent item and its first child — and the gap
+   between the list and the prose around it — stays as it was. */
+.md-editor-host .ProseMirror .prosemirror-flat-list > .prosemirror-flat-list + .prosemirror-flat-list {
+  margin-top: 0.55em;
+}
+
+/* meowdown reveals the markdown syntax around the selection, and ProseMirror
+   always has one — including right after a document is loaded, which exposed
+   the first heading's markers before the reader had touched anything. Tying
+   the reveal to focus as well keeps it for the person who is actually
+   editing. Declared outside every cascade layer, so it outranks the
+   `:has(.show)` rule from meowdown's own stylesheet. */
+.md-editor-host .ProseMirror:not(:focus-within)
+  :is(.md-mark, .md-link-uri, .md-link-title):has(.show) {
+  opacity: 0;
+  font-size: 0;
+  letter-spacing: 0;
+}
+
+/* Image placeholders. `data-md-img` is written by `image-loading.ts`; the
+   selectors deliberately out-specify meowdown's own `[data-loading]` rule,
+   which would otherwise reset our background. */
+.md-editor-host .ProseMirror .md-image-resizable[data-md-img='loading'],
+.md-editor-host .ProseMirror .md-image-resizable[data-md-img='failed'] {
+  overflow: hidden;
+  border-radius: var(--meowdown-image-radius, 0.5rem);
+  background: var(--md-skeleton-bg);
+  box-shadow: inset 0 0 0 1px var(--md-skeleton-border);
+}
+
+/* An image nobody has resized shares the block-media width, so its right edge
+   lands where the cards and embeds above it end. A persisted `data-width` is a
+   size the reader dragged out themselves and is left alone. */
+.md-editor-host .ProseMirror .md-image-resizable:where(:not([data-width])) {
+  max-width: var(--md-media-width);
+}
+
+/* An image that has not loaded has no intrinsic box, so the placeholder brings
+   its own size. Skipped once meowdown has written a persisted display size —
+   while it is *loading*, a picture the reader already sized should hold that
+   space rather than jumping into it.
+   The fallback is `vw`, not `100%`: meowdown's preview wrapper is a
+   shrink-to-fit inline-block, so a percentage min-width has no definite
+   containing block to resolve against and collapses to zero. */
+.md-editor-host .ProseMirror .md-image-resizable[data-md-img='loading']:where(:not([data-width])) {
+  min-width: min(400px, 70vw, var(--md-media-max));
+}
+
+.md-editor-host .ProseMirror .md-image-resizable[data-md-img='loading']:where(:not([data-height])) {
+  min-height: 140px;
+}
+
+/* Failure is a terminal state, and the persisted size no longer means anything:
+   it describes a picture that is not there. A 1400×900 screenshot would
+   otherwise leave a page-high slab of grey holding one small caption. So the
+   card drops the remembered dimensions entirely and takes the standard
+   placeholder box — `!important` because the size is written as an inline style
+   by the resizable element, which no selector can outrank. */
+.md-editor-host .ProseMirror .md-image-resizable[data-md-img='failed'] {
+  width: auto !important;
+  height: auto !important;
+  aspect-ratio: auto !important;
+  min-width: min(400px, 70vw, var(--md-media-max));
+  min-height: 140px;
+  max-width: var(--md-media-width);
+}
+
+.md-editor-host .ProseMirror .md-image-resizable[data-md-img] img {
+  transition: opacity 0.2s ease;
+}
+
+.md-editor-host .ProseMirror .md-image-resizable[data-md-img='loading'] img {
+  opacity: 0;
+}
+
+.md-editor-host .ProseMirror .md-image-resizable[data-md-img='loaded'] img {
+  opacity: 1;
+}
+
+/* The sheen is a separate layer rather than a moving background-position: a
+   transform animates off the main thread and loops seamlessly, because the
+   gradient fades out at both ends. */
+.md-editor-host .ProseMirror .md-image-resizable[data-md-img='loading']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 25%,
+    var(--md-skeleton-sheen) 50%,
+    transparent 75%
+  );
+  /* Linear, not eased: an eased sweep spends most of the cycle parked at the
+     extremes, where the band sits outside the box and the skeleton reads flat. */
+  animation: md-image-shimmer 1.4s linear infinite;
+}
+
+@keyframes md-image-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* Failure: drop the broken-image glyph and lay the box out as an icon over a
+   caption instead. */
+.md-editor-host .ProseMirror .md-image-resizable[data-md-img='failed'] {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0.5rem;
+  cursor: default;
+}
+
+.md-editor-host .ProseMirror .md-image-resizable[data-md-img='failed'] img,
+.md-editor-host .ProseMirror .md-image-resizable[data-md-img='failed'] .md-image-resize-handle {
+  display: none;
+}
+
+.md-editor-host .ProseMirror .md-image-resizable[data-md-img='failed']::before {
+  content: '';
+  width: 1.25rem;
+  height: 1.25rem;
+  background-color: var(--md-muted);
+  -webkit-mask: var(--md-image-off, none) center / contain no-repeat;
+  mask: var(--md-image-off, none) center / contain no-repeat;
+}
+
+.md-editor-host .ProseMirror .md-image-resizable[data-md-img='failed']::after {
+  content: '图片加载失败';
+  color: var(--md-muted);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  line-height: 1.2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .md-editor-host .ProseMirror .md-image-resizable[data-md-img='loading']::after {
+    display: none;
+  }
+
+  .md-editor-host .ProseMirror .md-image-resizable[data-md-img] img {
+    transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------- Link blocks
+   A paragraph holding nothing but a bare URL renders as a card, a YouTube
+   player or a tweet. The paragraph itself is still there — the markdown on disk
+   is only ever the URL — so it is collapsed to nothing rather than removed from
+   the flow: a zero-sized box keeps a caret target where the text is, the same
+   technique meowdown uses to hide markdown syntax away from the selection. */
+.md-editor-host .ProseMirror p.md-link-block {
+  height: 0;
+  margin: 0;
+  overflow: hidden;
+  opacity: 0;
+  font-size: 0;
+  line-height: 0;
+  letter-spacing: 0;
+}
+
+/* Put the caret in the paragraph and the URL comes back, so it stays editable.
+   Tied to editor focus as well, because a freshly opened document parks its
+   selection at the very start and would otherwise show the source of a link
+   block sitting in the first line. */
+.md-editor-host .ProseMirror:focus-within p.md-link-block[data-md-link-caret] {
+  height: auto;
+  margin: revert;
+  opacity: 1;
+  font-size: 0.9375rem;
+  line-height: 1.7;
+  letter-spacing: normal;
+}
+
+.md-editor-host
+  .ProseMirror:focus-within
+  .md-link-block-widget:has(+ p.md-link-block[data-md-link-caret]) {
+  display: none;
+}
+
+.md-editor-host .ProseMirror .md-link-block-widget {
+  margin: 0.85em 0;
+}
+
+/* Every block-level medium — player, tweet, site card — is capped at the same
+   width and left-aligned in the text column, so their edges line up down the
+   document instead of each finding its own. The shared width sits inside the
+   250–550px range X's own iframe is happy in, so a tweet lays itself out
+   normally at it. */
+.md-editor-host .ProseMirror .md-link-block-widget {
+  max-width: var(--md-media-width);
+}
+
+.md-editor-host .ProseMirror .md-link-block-widget[data-kind='card'] {
+  /* Reserve the bar's height before React has mounted the card, so a document
+     full of links does not shuffle as each one paints. */
+  min-height: 5rem;
+}
+
+.md-link-card {
+  display: flex;
+  align-items: stretch;
+  gap: 0.875rem;
+  box-sizing: border-box;
+  height: 5rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--md-border);
+  border-radius: 0.5rem;
+  background: var(--md-panel);
+  color: inherit;
+  font-family: var(--font-sans);
+  text-decoration: none;
+  overflow: hidden;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+a.md-link-card:hover {
+  background: var(--md-hover);
+  border-color: color-mix(in oklab, var(--md-accent) 45%, var(--md-border));
+}
+
+.md-link-card-body {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.25rem;
+}
+
+.md-link-card-title,
+.md-link-card-desc,
+.md-link-card-domain {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.md-link-card-title {
+  color: var(--md-fg);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.md-link-card-desc {
+  color: var(--md-muted);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.md-link-card-meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.3125rem;
+}
+
+.md-link-card-favicon {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex-shrink: 0;
+  border-radius: 0.1875rem;
+  object-fit: contain;
+}
+
+/* A site with no usable icon keeps the slot, so the domain never shifts. */
+.md-link-card-favicon-blank {
+  background: color-mix(in oklab, var(--md-muted) 25%, transparent);
+}
+
+.md-link-card-domain {
+  color: var(--md-muted);
+  font-size: 0.6875rem;
+  line-height: 1.35;
+}
+
+.md-link-card-thumb {
+  width: 7.5rem;
+  height: 100%;
+  flex-shrink: 0;
+  /* Cancels the editor-wide image radius/margins meowdown sets on `img`. */
+  margin: 0;
+  border-radius: 0.375rem;
+  object-fit: cover;
+  background: var(--md-skeleton-bg);
+}
+
+/* Nothing was readable at the far end: domain over URL, same box. */
+.md-link-card[data-minimal] .md-link-card-desc {
+  font-size: 0.6875rem;
+}
+
+.md-link-card-skeleton {
+  align-items: center;
+  cursor: default;
+}
+
+.md-link-card-bone {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: 0.25rem;
+  background: var(--md-skeleton-bg);
+}
+
+.md-link-card-bone-title {
+  width: 45%;
+  height: 0.75rem;
+}
+
+.md-link-card-bone-text {
+  width: 80%;
+  height: 0.6875rem;
+}
+
+.md-link-card-bone-meta {
+  width: 30%;
+  height: 0.625rem;
+}
+
+.md-link-card-bone-thumb {
+  width: 7.5rem;
+  height: 100%;
+  flex-shrink: 0;
+  border-radius: 0.375rem;
+}
+
+/* Same sweep as the image skeleton, so the two read as one loading language. */
+.md-link-card-bone::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 25%,
+    var(--md-skeleton-sheen) 50%,
+    transparent 75%
+  );
+  animation: md-image-shimmer 1.4s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .md-link-card-bone::after {
+    display: none;
+  }
+}
+
+/* Pierre trees renders into a shadow root; align it with our palette. The
+   background override is what makes the sidebar one continuous surface: the
+   tree ships its own (darker) sidebar colour, which turned the header row above
+   it into a separate-looking bar. */
 .md-tree {
   --trees-fg-override: var(--md-fg);
+  --trees-bg-override: var(--md-panel);
   --trees-border-color-override: transparent;
   --trees-selected-bg-override: color-mix(in oklab, var(--md-accent) 18%, transparent);
 }
@@ -96,6 +579,17 @@ body {
   background: var(--md-tooltip-bg);
   color: var(--md-tooltip-fg);
   box-shadow: var(--md-menu-shadow);
+}
+
+/* The narrow-viewport outline floats over the text rather than pushing it
+   aside, so it is translucent and blurs what it covers — the reader keeps the
+   context of the paragraph underneath. */
+.md-glass {
+  background: var(--md-glass-bg);
+  border-color: var(--md-glass-border);
+  box-shadow: var(--md-menu-shadow);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  backdrop-filter: blur(12px) saturate(180%);
 }
 
 ::-webkit-scrollbar {

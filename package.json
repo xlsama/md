@@ -11,10 +11,10 @@
     "release": "bumpp -r"
   },
   "devDependencies": {
-    "@types/bun": "latest",
-    "bumpp": "latest",
-    "oxlint": "latest",
+    "@types/bun": "^1.3.14",
+    "bumpp": "^12.2.0",
+    "oxlint": "^1.78.0",
     "oxlint-tsgolint": "^7.0.2001",
-    "typescript": "latest"
+    "typescript": "^7.0.2"
   }
 }

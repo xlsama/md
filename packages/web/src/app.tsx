@@ -1,13 +1,16 @@
-import { useEffect } from 'react';
+import { useNavigate, useRouter, useSearch } from '@tanstack/react-router';
+import { useEffect, useRef, type CSSProperties } from 'react';
 import { fetchHealth } from './api.ts';
 import { ConflictBanner } from './components/conflict-banner.tsx';
 import { Dialogs } from './components/dialogs.tsx';
 import { Editor } from './components/editor.tsx';
 import { Sidebar } from './components/file-tree.tsx';
 import { Icon } from './components/icon.tsx';
+import { SettingsDialog } from './components/settings-dialog.tsx';
 import { Toasts } from './components/toasts.tsx';
-import { Toc } from './components/toc.tsx';
+import { Toc, useTocView } from './components/toc.tsx';
 import { TopBar } from './components/top-bar.tsx';
+import { readFileParam } from './lib/route.ts';
 import { session } from './session.ts';
 import { useStore } from './store.ts';
 import { createWsClient } from './ws.ts';
@@ -30,6 +33,51 @@ function Welcome() {
   );
 }
 
+/**
+ * Keeps `?file=` and the open document in step.
+ *
+ * Outbound is the normal direction: every way of opening a document — the tree,
+ * a wikilink, the CLI's `focus`, a file just created — goes through the session,
+ * which mirrors its path into the URL. `replace` because switching files inside
+ * one workspace is not a page the reader would expect Back to return to; the
+ * cost is that Back leaves the app rather than stepping through files.
+ *
+ * Inbound only matters when something outside the app moves the URL — the
+ * address bar, or a history entry from a real page load. The first render is
+ * skipped: the initial `?file=` is the session's to consume, once the daemon
+ * has said which workspace it belongs to.
+ */
+function useFileParam(): void {
+  const navigate = useNavigate();
+  const router = useRouter();
+
+  useEffect(() => {
+    session.setRoute({
+      readFile: () => readFileParam(router.latestLocation.search),
+      setFile: (file) => {
+        // A same-href navigation is not free — the router reloads its matches
+        // and runs the scroll cache again — and the session syncs on every
+        // document event, so unchanged is the common case.
+        if (readFileParam(router.latestLocation.search) === file) return;
+        void navigate({ to: '/', search: file === null ? {} : { file }, replace: true });
+      },
+    });
+    return () => {
+      session.setRoute(null);
+    };
+  }, [navigate, router]);
+
+  const file = useSearch({ from: '/', select: (search) => search.file ?? null });
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    if (file !== null && file !== session.currentPath()) session.open(file);
+  }, [file]);
+}
+
 function useConnection(): void {
   useEffect(() => {
     const client = createWsClient({
@@ -44,13 +92,30 @@ function useConnection(): void {
       },
     });
     session.setSend(client.send);
-    void fetchHealth().then((health) => {
-      if (health !== null) useStore.getState().setRipgrep(health.ripgrep);
-    });
     return () => {
       session.setSend(null);
       client.close();
     };
+  }, []);
+}
+
+/**
+ * Says so when the daemon is not watching the filesystem.
+ *
+ * `fs.watch` can fail outright — a workspace on a network mount, or too many
+ * open descriptors — and the failure is otherwise invisible: everything keeps
+ * working except the one guarantee the app is built around, that an agent's
+ * edits show up on their own. Better a warning than a reader wondering why
+ * their notes look stale.
+ */
+function useWatcherWarning(): void {
+  useEffect(() => {
+    void fetchHealth().then((health) => {
+      if (health === null || health.watching || health.workspace === null) return;
+      useStore
+        .getState()
+        .pushToast('外部改动监听不可用，其他程序修改的文件不会自动刷新', 'error');
+    });
   }, []);
 }
 
@@ -68,9 +133,23 @@ function useSaveShortcut(): void {
   }, []);
 }
 
+/** The docked outline floats over the text column, so the column pays for it in padding. */
+const TOC_RESERVE = '17rem';
+
+/** Custom properties are not part of `CSSProperties`, hence the widened type. */
+function shellStyle(tocDocked: boolean): CSSProperties {
+  const style: CSSProperties & Record<string, string> = {
+    '--md-toc-reserve': tocDocked ? TOC_RESERVE : '0px',
+  };
+  return style;
+}
+
 export function App() {
   const root = useStore((s) => s.root);
+  const tocView = useTocView();
+  useFileParam();
   useConnection();
+  useWatcherWarning();
   useSaveShortcut();
 
   return (
@@ -80,17 +159,24 @@ export function App() {
       ) : (
         <>
           <TopBar />
-          <div className="flex min-h-0 flex-1">
+          <div className="flex min-h-0 flex-1" style={shellStyle(tocView === 'docked')}>
             <Sidebar />
+            {/* The editor column runs to the right edge of the window: its
+                scrollbar is the one the reader reaches for. The outline floats
+                over that column — inside it, so a conflict banner pushes the
+                outline down with the text instead of being covered by it. */}
             <main className="flex min-w-0 flex-1 flex-col">
               <ConflictBanner />
-              <Editor />
+              <div className="relative flex min-h-0 flex-1 flex-col">
+                <Editor />
+                <Toc />
+              </div>
             </main>
-            <Toc />
           </div>
         </>
       )}
       <Dialogs />
+      <SettingsDialog />
       <Toasts />
     </div>
   );

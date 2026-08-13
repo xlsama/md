@@ -6,7 +6,8 @@ import { isMarkdown } from './files.ts';
 
 const AUTOCORRECT_RC = ['.autocorrectrc', '.autocorrectrc.yml', '.autocorrectrc.yaml'];
 const OXFMT_RC = ['.oxfmtrc.json'];
-// 代码块里的字符串/注释不动：改字面量会改变程序行为。用户的 .autocorrectrc 优先。
+// Leave code blocks alone: rewriting a string literal or a comment inside one
+// changes what the program does. A workspace `.autocorrectrc` still wins.
 const DEFAULT_AUTOCORRECT_CONFIG = JSON.stringify({ context: { codeblock: 0 } });
 
 let oxfmtConfig: FormatConfig | undefined;
@@ -23,7 +24,8 @@ async function readFirst(root: string, names: string[]): Promise<string | null> 
 export async function loadWorkspaceFormatConfig(root: string): Promise<void> {
   const autocorrectRc = await readFirst(root, AUTOCORRECT_RC);
   try {
-    // loadConfig('') 是 no-op 而非重置，必须显式传完整配置，否则上个工作区的配置会残留
+    // `loadConfig('')` is a no-op rather than a reset, so a complete config has
+    // to be passed every time — otherwise the previous workspace's rules linger.
     loadConfig(autocorrectRc ?? DEFAULT_AUTOCORRECT_CONFIG);
   } catch {
     try {
@@ -41,10 +43,6 @@ export async function loadWorkspaceFormatConfig(root: string): Promise<void> {
   }
 }
 
-export function currentOxfmtConfig(): FormatConfig | undefined {
-  return oxfmtConfig;
-}
-
 export interface FormatOutcome {
   text: string;
   autocorrectApplied: boolean;
@@ -52,40 +50,60 @@ export interface FormatOutcome {
   errors: string[];
 }
 
-export async function formatMarkdownDetailed(filePath: string, source: string): Promise<FormatOutcome> {
+/** Which halves of the pipeline the user left switched on. */
+export interface FormatToggles {
+  autocorrect: boolean;
+  oxfmt: boolean;
+}
+
+const BOTH_ON: FormatToggles = { autocorrect: true, oxfmt: true };
+
+export async function formatMarkdownDetailed(
+  filePath: string,
+  source: string,
+  toggles: FormatToggles = BOTH_ON
+): Promise<FormatOutcome> {
   if (!isMarkdown(filePath)) {
     return { text: source, autocorrectApplied: false, oxfmtApplied: false, errors: [] };
   }
   const errors: string[] = [];
   let text = source;
   let autocorrectApplied = false;
-  try {
-    const out = formatFor(text, filePath);
-    if (typeof out === 'string') {
-      text = out;
-      autocorrectApplied = true;
+  if (toggles.autocorrect) {
+    try {
+      const out = formatFor(text, filePath);
+      if (typeof out === 'string') {
+        text = out;
+        autocorrectApplied = true;
+      }
+    } catch (err) {
+      errors.push(`autocorrect: ${String(err)}`);
     }
-  } catch (err) {
-    errors.push(`autocorrect: ${String(err)}`);
   }
 
   let oxfmtApplied = false;
-  try {
-    const result = await oxfmt(filePath, text, oxfmtConfig);
-    const resultErrors = result.errors ?? [];
-    if (resultErrors.length === 0 && typeof result.code === 'string') {
-      text = result.code;
-      oxfmtApplied = true;
-    } else {
-      for (const e of resultErrors) errors.push(`oxfmt: ${typeof e === 'string' ? e : JSON.stringify(e)}`);
+  if (toggles.oxfmt) {
+    try {
+      const result = await oxfmt(filePath, text, oxfmtConfig);
+      const resultErrors = result.errors ?? [];
+      if (resultErrors.length === 0 && typeof result.code === 'string') {
+        text = result.code;
+        oxfmtApplied = true;
+      } else {
+        for (const e of resultErrors) errors.push(`oxfmt: ${typeof e === 'string' ? e : JSON.stringify(e)}`);
+      }
+    } catch (err) {
+      errors.push(`oxfmt: ${String(err)}`);
     }
-  } catch (err) {
-    errors.push(`oxfmt: ${String(err)}`);
   }
 
   return { text, autocorrectApplied, oxfmtApplied, errors };
 }
 
-export async function formatMarkdown(filePath: string, source: string): Promise<string> {
-  return (await formatMarkdownDetailed(filePath, source)).text;
+export async function formatMarkdown(
+  filePath: string,
+  source: string,
+  toggles?: FormatToggles
+): Promise<string> {
+  return (await formatMarkdownDetailed(filePath, source, toggles)).text;
 }

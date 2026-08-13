@@ -2,11 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import {
   basename,
   dirname,
-  isMarkdownPath,
+  isMarkdown,
   join,
   normalize,
   resolveImageUrl,
   stripExtension,
+  withMarkdownExtension,
 } from '../src/lib/paths.ts';
 
 describe('path helpers', () => {
@@ -25,11 +26,11 @@ describe('path helpers', () => {
     expect(stripExtension('.gitignore')).toBe('.gitignore');
   });
 
-  test('isMarkdownPath', () => {
-    expect(isMarkdownPath('a.md')).toBe(true);
-    expect(isMarkdownPath('a.MARKDOWN')).toBe(true);
-    expect(isMarkdownPath('a.txt')).toBe(false);
-    expect(isMarkdownPath('dir')).toBe(false);
+  test('isMarkdown', () => {
+    expect(isMarkdown('a.md')).toBe(true);
+    expect(isMarkdown('a.MARKDOWN')).toBe(true);
+    expect(isMarkdown('a.txt')).toBe(false);
+    expect(isMarkdown('dir')).toBe(false);
   });
 
   test('normalize collapses . and ..', () => {
@@ -75,5 +76,24 @@ describe('resolveImageUrl', () => {
 
   test('no document open: resolve against the workspace root', () => {
     expect(resolveImageUrl('assets/a.png', null)).toBe('/raw/assets/a.png');
+  });
+});
+
+describe('withMarkdownExtension', () => {
+  test('supplies the extension the daemon insists on', () => {
+    expect(withMarkdownExtension('test23')).toBe('test23.md');
+    expect(withMarkdownExtension('  hello  ')).toBe('hello.md');
+    expect(withMarkdownExtension('notes.2024')).toBe('notes.2024.md');
+    expect(withMarkdownExtension('.gitignore')).toBe('.gitignore.md');
+  });
+
+  test('leaves a name that already has one exactly as typed', () => {
+    expect(withMarkdownExtension('a.md')).toBe('a.md');
+    expect(withMarkdownExtension('a.MD')).toBe('a.MD');
+    expect(withMarkdownExtension('a.markdown')).toBe('a.markdown');
+  });
+
+  test('an empty name stays empty, so the caller can treat it as a cancel', () => {
+    expect(withMarkdownExtension('   ')).toBe('');
   });
 });

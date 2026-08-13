@@ -74,3 +74,26 @@ describe('autocorrect codeblock 处理', () => {
     await fs.rm(root, { recursive: true, force: true });
   });
 });
+
+describe('裸链接段落', () => {
+  test('格式化保留独占段落的裸链接，不拆行也不加空格', async () => {
+    const root = await tmpWorkspace();
+    await loadWorkspaceFormatConfig(root);
+    const src = [
+      '# 标题',
+      '',
+      'https://example.com/a?b=1&c=2  ',
+      '',
+      '<https://www.youtube.com/watch?v=dQw4w9WgXcQ>',
+      '',
+    ].join('\n');
+    const out = await formatMarkdown(path.join(root, 'a.md'), src);
+    // Trailing whitespace goes, the URL itself does not — the rendered card is
+    // driven by the paragraph text, so any rewrite here would change what the
+    // reader sees after a save.
+    expect(out).toBe(
+      ['# 标题', '', 'https://example.com/a?b=1&c=2', '', '<https://www.youtube.com/watch?v=dQw4w9WgXcQ>', ''].join('\n')
+    );
+    expect(await formatMarkdown(path.join(root, 'a.md'), out)).toBe(out);
+  });
+});
