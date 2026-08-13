@@ -5,12 +5,12 @@
   "type": "module",
   "license": "MIT",
   "author": "xlsama",
-  "homepage": "https://github.com/xlsama/writedown#readme",
+  "homepage": "https://github.com/xlsama/md#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/xlsama/writedown.git"
+    "url": "git+https://github.com/xlsama/md.git"
   },
-  "bugs": "https://github.com/xlsama/writedown/issues",
+  "bugs": "https://github.com/xlsama/md/issues",
   "keywords": [
     "markdown",
     "editor",

@@ -21,7 +21,7 @@
 ## 技术栈与依赖
 
 - pnpm workspace（root：`pnpm-workspace.yaml`），**所有依赖装 latest**，TypeScript 全程。
-- `packages/md`（包名 `writedown`，`"bin": {"md": "./src/cli.ts"}`，shebang `#!/usr/bin/env bun`，无构建步骤，bun 直跑 TS）：
+- `packages/md`（包名 `@xlsama/md`，`"bin": {"md": "./src/cli.ts"}`，shebang `#!/usr/bin/env bun`，无构建步骤，bun 直跑 TS）：
   - Hono（HTTP 路由）、`Bun.serve` 原生 WebSocket、Zod
   - `oxfmt`（JS API：`format(fileName, text) → Promise<{code, errors}>`，已验证支持 markdown）
   - `autocorrect-node`（NAPI：`formatFor(text, filepath) → string`、`loadConfig(configStr)`）
@@ -212,7 +212,7 @@ launchd plist：Label `dev.md.daemon`，`ProgramArguments` 用绝对路径（`pr
 
 ## 发布与开源
 
-- npm 包名 **`@xlsama/md`**（发布 packages/md 单包；`bin` 仍是 `md`），GitHub `xlsama/writedown`，public，MIT LICENSE。无 scope 的 `writedown` 被 npm 以「与 `write-down` 过于相似」拒绝，故走 scope。
+- npm 包名 **`@xlsama/md`**（发布 packages/md 单包；`bin` 仍是 `md`），GitHub `xlsama/md`，public，MIT LICENSE。无 scope 的 `writedown` 被 npm 以「与 `write-down` 过于相似」拒绝，故走 scope。
 - 运行时要求 Bun（bin shebang `#!/usr/bin/env bun`），README 写明 `bun` 为前置依赖，安装方式 `bun add -g @xlsama/md` / `pnpm add -g @xlsama/md`。
 - 前端产物随包分发：`prepublishOnly` 构建 `@md/web` 并把 `dist` 拷入 `packages/md/web-dist/`，daemon 静态目录解析顺序：包内 `web-dist` → 仓库 `packages/web/dist`（开发态）。`files` 白名单：`src`、`web-dist`。
 - 版本与发版：root `release` 脚本用 `bumpp`（升级版本 + 自动打 tag），root 维护 `CHANGELOG.md`。
