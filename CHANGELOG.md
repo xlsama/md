@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.7
+
+设置面板不再用工具名当标题，粘贴时转存图片默认关闭，自动保存延迟默认 100ms / Settings rows are named by what they do rather than by the tool behind them; importing pasted remote images is now off by default and the autosave delay defaults to 100ms.
+
 ## 0.1.4
 
 移除 0.1.3 的配置目录迁移逻辑 / Dropped the config directory migration added in 0.1.3.
