@@ -106,29 +106,29 @@ md/
 
 Server → Client：
 
-| type | payload | 时机 |
-|---|---|---|
-| `workspace` | `{ root, focus: string \| null, tree }` | 连接建立、工作区切换 |
-| `tree` | `{ tree }` | 结构变化（增删改名、外部新增文件） |
-| `focus` | `{ path }` | CLI 打开了某文件，所有客户端切过去 |
-| `file` | `{ path, content, hash }` | 响应 `open` |
-| `saved` | `{ path, content, hash }` | 保存成功回执；`content` 是**格式化后**全文（供空闲回灌） |
-| `conflict` | `{ path, diskContent, diskHash }` | 保存时 baseHash 与磁盘不符 |
-| `external` | `{ path, content, hash }` | watcher 检测到外部改动（非 echo） |
-| `search-results` | `{ query, results: {path, line, column, preview}[] }` | 响应 `search` |
-| `error` | `{ message, op? }` | 任意操作失败 |
+| type             | payload                                               | 时机                                                     |
+| ---------------- | ----------------------------------------------------- | -------------------------------------------------------- |
+| `workspace`      | `{ root, focus: string \| null, tree }`               | 连接建立、工作区切换                                     |
+| `tree`           | `{ tree }`                                            | 结构变化（增删改名、外部新增文件）                       |
+| `focus`          | `{ path }`                                            | CLI 打开了某文件，所有客户端切过去                       |
+| `file`           | `{ path, content, hash }`                             | 响应 `open`                                              |
+| `saved`          | `{ path, content, hash }`                             | 保存成功回执；`content` 是**格式化后**全文（供空闲回灌） |
+| `conflict`       | `{ path, diskContent, diskHash }`                     | 保存时 baseHash 与磁盘不符                               |
+| `external`       | `{ path, content, hash }`                             | watcher 检测到外部改动（非 echo）                        |
+| `search-results` | `{ query, results: {path, line, column, preview}[] }` | 响应 `search`                                            |
+| `error`          | `{ message, op? }`                                    | 任意操作失败                                             |
 
 Client → Server：
 
-| type | payload | 语义 |
-|---|---|---|
-| `open` | `{ path }` | 请求文件内容 |
-| `save` | `{ path, content, baseHash }` | 保存；服务端校验磁盘 hash == baseHash，不符回 `conflict` |
-| `force-save` | `{ path, content }` | 冲突解决选「保留我的」时用，跳过 hash 校验 |
-| `create` | `{ path, kind: 'file' \| 'dir' }` | 新建（文件初始内容空） |
-| `rename` | `{ from, to }` | 重命名/移动 |
-| `delete` | `{ path }` | 进废纸篓 |
-| `search` | `{ query }` | rg 全文搜索（客户端防抖 300ms） |
+| type         | payload                           | 语义                                                     |
+| ------------ | --------------------------------- | -------------------------------------------------------- |
+| `open`       | `{ path }`                        | 请求文件内容                                             |
+| `save`       | `{ path, content, baseHash }`     | 保存；服务端校验磁盘 hash == baseHash，不符回 `conflict` |
+| `force-save` | `{ path, content }`               | 冲突解决选「保留我的」时用，跳过 hash 校验               |
+| `create`     | `{ path, kind: 'file' \| 'dir' }` | 新建（文件初始内容空）                                   |
+| `rename`     | `{ from, to }`                    | 重命名/移动                                              |
+| `delete`     | `{ path }`                        | 进废纸篓                                                 |
+| `search`     | `{ query }`                       | rg 全文搜索（客户端防抖 300ms）                          |
 
 ## 同步与冲突模型（关键决策）
 
@@ -155,7 +155,7 @@ Meowdown 是非受控组件：`<MeowdownEditor initialMarkdown={…} handleRef={
 - **只读开关**：TopBar 有一个只读切换（`readOnly` 传给编辑器），状态存 localStorage `md:read-only`。它只挡输入，不改渲染模式。
 - **Wikilinks**：`onWikilinkSearch(query)` → 用 store 里树的 `.md` 基名（去扩展名）模糊过滤；`onWikilinkClick(target)` → 按基名在树中找文件发 `open`，找不到 toast 提示不存在。
 - **图片显示**：`resolveImageUrl(src)`：相对路径改写为 `/raw/<当前文件所在目录>/<src>`；http(s) 绝对地址原样返回。
-- **图片占位态**（`image-loading.ts` + `lib/image-status.ts`）：加载中流光骨架、失败换成图标+「图片加载失败」卡片，都写在 `data-md-img` 上。规则：**新出现的图片一律以 loading 起步**；只有「这个元素当前的 src 真的 error 了」才进失败态——`error` 事件延后一个 task 再按当时的 src 复核，src 在中途被改写（相对路径 resolve 前后是两个 src）时那次 error 直接作废。失败态**忽略**持久化的 `data-width/height`（那尺寸描述的是一张不存在的图），统一用标准占位框；加载中仍尊重持久化尺寸，免得图进来时跳版。
+- **图片占位态**（`image-loading.ts` + `lib/image-status.ts`）：加载中流光骨架、失败换成图标 +「图片加载失败」卡片，都写在 `data-md-img` 上。规则：**新出现的图片一律以 loading 起步**；只有「这个元素当前的 src 真的 error 了」才进失败态——`error` 事件延后一个 task 再按当时的 src 复核，src 在中途被改写（相对路径 resolve 前后是两个 src）时那次 error 直接作废。失败态**忽略**持久化的 `data-width/height`（那尺寸描述的是一张不存在的图），统一用标准占位框；加载中仍尊重持久化尺寸，免得图进来时跳版。
 - **块级媒体宽度**：图片 / 视频 / 推文 / 站点卡片共用 `--md-media-width: min(390px, 100%)`，边缘在正文列里对齐。用户手动拖过的尺寸继续尊重，上限是正文列宽（resizable root 自带 `max-width: 100%`，天然被容器夹住）。
 - **粘贴图片**：拦截 paste/drop 中的图片（Meowdown 若有 upload/file 回调 prop 优先走它，没有则在容器上拦 paste 事件）→ `POST /api/assets`（multipart：file + docPath）→ 服务端存 `<doc 所在目录>/assets/<yyyyMMdd-HHmmss>-<原名或 pasted.png>` → 返回相对路径 → 编辑器光标处插入 ``。
 - **粘贴转存远程图片**（`importPastedImages` 开关，默认关）：容器 paste 事件 capture 阶段读剪贴板文本（不动粘贴本身），提取其中的远程图片 URL（markdown `![]()` 与 `<img src>`，单次上限 50、去重）→ 逐个 `POST /api/assets/import`（并发 3）→ daemon 按 link-meta 同款 SSRF 规则下载（仅 http(s)、逐跳查重定向、必须声明 image/* 类型、20MB 上限）存进 assetsDir，文件名 `<时间戳>-<URL哈希前8>.<扩展名>` → 前端把编辑器文档里的该 URL **按字面文本替换**为本地相对路径（正常 transaction：可撤销、光标经 mapping 保持、触发自动保存）。文档已切换/已编辑掉 URL 时替换自然落空。失败静默保留原链接，最后汇总一条 toast。动机：粘贴来的图片链接（飞书/Notion/带签名的 CDN）会过期，本地才留得住。
@@ -164,15 +164,15 @@ Meowdown 是非受控组件：`<MeowdownEditor initialMarkdown={…} handleRef={
 
 ## HTTP API（Hono 路由；前端直接 `fetch`，响应用 protocol 里的 Zod schema 校验）
 
-| 路由 | 语义 |
-|---|---|
-| `GET /api/health` | `{ pid, version, workspace, clients, ripgrep, watching }`（clients = 当前 WS 连接数；`ripgrep` = `rg` 是否在 PATH 上；`watching` = 文件监听是否活着，为 false 时前端 toast 提示外部改动不会自动刷新） |
-| `POST /api/open` | body `{ path }`（绝对路径）。解析 root/focus → 切工作区 → 广播 `focus`。返回 `{ url, clients }`。CLI 专用 |
-| `POST /api/assets` | multipart 存图，返回 `{ relativePath }` |
-| `POST /api/assets/import` | body `{ url, docPath }`。下载远程图片存进 assetsDir（SSRF 防护同 link-meta），返回 `{ relativePath, workspacePath }` |
-| `GET /raw/*` | 按工作区相对路径回源文件（图片等）。**必须**做 realpath 包含校验防路径穿越 |
-| `GET /ws` | WebSocket upgrade |
-| `GET /*` | 静态服务 `packages/web/dist`（SPA fallback 到 index.html）；dist 不存在时返回提示页「先 pnpm build」。`assets/*` 文件名带内容哈希 → `immutable` 长缓存；index.html → `no-store`，否则升级后浏览器还端着上个版本的壳 |
+| 路由                      | 语义                                                                                                                                                                                                                |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/health`         | `{ pid, version, workspace, clients, ripgrep, watching }`（clients = 当前 WS 连接数；`ripgrep` = `rg` 是否在 PATH 上；`watching` = 文件监听是否活着，为 false 时前端 toast 提示外部改动不会自动刷新）               |
+| `POST /api/open`          | body `{ path }`（绝对路径）。解析 root/focus → 切工作区 → 广播 `focus`。返回 `{ url, clients }`。CLI 专用                                                                                                           |
+| `POST /api/assets`        | multipart 存图，返回 `{ relativePath }`                                                                                                                                                                             |
+| `POST /api/assets/import` | body `{ url, docPath }`。下载远程图片存进 assetsDir（SSRF 防护同 link-meta），返回 `{ relativePath, workspacePath }`                                                                                                |
+| `GET /raw/*`              | 按工作区相对路径回源文件（图片等）。**必须**做 realpath 包含校验防路径穿越                                                                                                                                          |
+| `GET /ws`                 | WebSocket upgrade                                                                                                                                                                                                   |
+| `GET /*`                  | 静态服务 `packages/web/dist`（SPA fallback 到 index.html）；dist 不存在时返回提示页「先 pnpm build」。`assets/*` 文件名带内容哈希 → `immutable` 长缓存；index.html → `no-store`，否则升级后浏览器还端着上个版本的壳 |
 
 所有文件操作（含 WS 消息里的 path）解析后必须落在 workspace root 之内，否则拒绝。
 
@@ -204,7 +204,7 @@ launchd plist：Label `dev.md.daemon`，`ProgramArguments` 用绝对路径（`pr
 1. `md ~/notes` 打开浏览器显示文件树，点击文件可编辑，改动 ≤1s 落盘且磁盘内容已被 autocorrect+oxfmt 格式化
 2. 外部 `echo >> file.md` 修改：浏览器不脏时 ≤1s 内容自动刷新；正在编辑（脏）时出现冲突条，展开可见 diff，两个选项都工作
 3. 打字过程中光标不跳、输入不被格式化打断；停止输入 2s 后编辑器内容变为格式化版且光标位置合理
-4. `md another.md` 在已连接页面上直接切换工作区+聚焦，不重复开 tab；无页面连接时自动开浏览器
+4. `md another.md` 在已连接页面上直接切换工作区 + 聚焦，不重复开 tab；无页面连接时自动开浏览器
 5. 树上新建/重命名/删除工作，删除的文件出现在废纸篓
 6. 粘贴截图 → `assets/` 目录出现文件，编辑器内图片立即显示，markdown 里是相对路径
 7. 全文搜索出结果，点击跳到对应文件
