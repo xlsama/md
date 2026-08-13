@@ -5,7 +5,7 @@ import pkg from '../package.json';
 import { healthResponseSchema, openResponseSchema, type HealthResponse } from './protocol.ts';
 import { ensureStateDir, logPath, readState, resolvePort } from './state.ts';
 import { runDaemonForeground } from './daemon.ts';
-import { buildPlist, defaultPlistOptions, installService, plistPath, uninstallService } from './service.ts';
+import { installService, serviceConfig, uninstallService } from './service.ts';
 
 const USAGE = `md — 浏览器里的本地 Markdown 编辑器
 
@@ -13,9 +13,9 @@ const USAGE = `md — 浏览器里的本地 Markdown 编辑器
   md <path>                 打开文件或目录（自动拉起 daemon）
   md                        恢复上次工作区
   md daemon [--port N]      前台运行 daemon
-  md service install        安装 launchd 服务（开机常驻）
-  md service uninstall      卸载 launchd 服务
-  md service plist          打印将要写入的 plist（不写盘）
+  md service install        安装开机自启服务（launchd / systemd / 计划任务）
+  md service uninstall      卸载开机自启服务
+  md service config         打印将要写入的服务配置（不写盘）
 
 选项：
   --port N                  端口（默认 2233，也可用 MD_PORT）
@@ -119,7 +119,14 @@ async function restartDaemon(port: number, pid: number): Promise<HealthResponse 
 }
 
 async function openBrowser(url: string): Promise<void> {
-  const cmd = process.platform === 'darwin' ? ['open', url] : ['xdg-open', url];
+  // The empty string after `start` is the window title: without it cmd.exe treats
+  // a quoted URL as the title and opens nothing.
+  const cmd =
+    process.platform === 'darwin'
+      ? ['open', url]
+      : process.platform === 'win32'
+        ? ['cmd', '/c', 'start', '', url]
+        : ['xdg-open', url];
   try {
     const proc = Bun.spawn({ cmd, stdout: 'ignore', stderr: 'ignore' });
     proc.unref();
@@ -189,13 +196,15 @@ async function commandService(action: string | undefined, port: number | undefin
       console.log(`md: uninstalled ${target}`);
       return;
     }
+    case 'config':
     case 'plist': {
-      console.log(`# ${plistPath()}`);
-      console.log(buildPlist(defaultPlistOptions(port)));
+      const { target, contents } = serviceConfig(port);
+      console.log(`# ${target}`);
+      console.log(contents);
       return;
     }
     default:
-      fail('usage: md service install|uninstall|plist');
+      fail('usage: md service install|uninstall|config');
   }
 }
 

@@ -37,6 +37,7 @@
     "start": "bun run src/cli.ts daemon",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
+    "build:binary": "bun run scripts/build-binary.ts",
     "prepublishOnly": "pnpm -w build && rm -rf web-dist && cp -R ../web/dist web-dist && cp ../../README.md ../../LICENSE ."
   },
   "engines": {

@@ -26,6 +26,7 @@ import {
   timestampPrefix,
 } from './files.ts';
 import { formatMarkdown } from './format.ts';
+import { webAssets, type WebAssets } from './assets.ts';
 import { hasRipgrep, search } from './search.ts';
 import { resolveTarget, Workspace } from './workspace.ts';
 import { clearPid, resolvePort, writePid } from './state.ts';
@@ -58,7 +59,7 @@ type MdSocket = ServerWebSocket<WSData>;
 interface DaemonContext {
   workspace: Workspace;
   clients: Set<MdSocket>;
-  webDist: string;
+  assets: WebAssets;
   version: string;
   linkMeta: LinkMetaCache;
   format: typeof formatMarkdown;
@@ -239,31 +240,24 @@ function createRoutes(ctx: DaemonContext) {
     })
     .get('*', async (c) => {
       const pathname = decodeURIComponent(new URL(c.req.url).pathname);
-      const asset = await serveWebAsset(ctx.webDist, pathname);
+      const asset = await serveWebAsset(ctx.assets, pathname);
       if (asset) return asset;
       return c.html(PLACEHOLDER_PAGE, 200);
     });
 }
 
-async function serveWebAsset(dist: string, pathname: string): Promise<Response | null> {
-  const indexPath = path.join(dist, 'index.html');
-  const hasIndex = await fs
-    .stat(indexPath)
-    .then((s) => s.isFile())
-    .catch(() => false);
-  if (!hasIndex) return null;
+async function serveWebAsset(assets: WebAssets, pathname: string): Promise<Response | null> {
+  const indexPath = await assets.resolve('index.html');
+  if (!indexPath) return null;
 
   const rel = pathname.replace(/^\/+/, '');
   if (rel) {
-    const candidate = path.resolve(dist, rel);
-    if (candidate === dist || candidate.startsWith(`${dist}${path.sep}`)) {
-      const stat = await fs.stat(candidate).catch(() => null);
-      if (stat?.isFile()) {
-        const type = contentTypeFor(candidate);
-        return new Response(Bun.file(candidate), {
-          headers: type ? { 'content-type': type } : {},
-        });
-      }
+    const file = await assets.resolve(rel);
+    if (file) {
+      const type = contentTypeFor(file);
+      return new Response(Bun.file(file), {
+        headers: type ? { 'content-type': type } : {},
+      });
     }
   }
   return new Response(Bun.file(indexPath), {
@@ -373,7 +367,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<DaemonHa
   const ctx: DaemonContext = {
     workspace,
     clients,
-    webDist,
+    assets: webAssets(webDist),
     version: options.version ?? pkg.version,
     linkMeta: new LinkMetaCache(options.linkMeta),
     format: options.format ?? formatMarkdown,

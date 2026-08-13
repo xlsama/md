@@ -13,8 +13,12 @@ export function configDir(): string {
   const override = process.env.MD_CONFIG_DIR;
   if (override !== undefined && override !== '') return path.resolve(override);
   const xdg = process.env.XDG_CONFIG_HOME;
-  const base = xdg !== undefined && xdg.trim() !== '' ? path.resolve(xdg) : path.join(homedir(), '.config');
-  return path.join(base, 'writedown');
+  if (xdg !== undefined && xdg.trim() !== '') return path.join(path.resolve(xdg), 'writedown');
+  if (process.platform === 'win32') {
+    const appData = process.env.APPDATA;
+    if (appData !== undefined && appData.trim() !== '') return path.join(path.resolve(appData), 'writedown');
+  }
+  return path.join(homedir(), '.config', 'writedown');
 }
 
 export function settingsPath(): string {

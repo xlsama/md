@@ -12,6 +12,10 @@ export const DEFAULT_PORT = 2233;
 export function stateDir(): string {
   const override = process.env.MD_STATE_DIR;
   if (override) return path.resolve(override);
+  if (process.platform === 'win32') {
+    const local = process.env.LOCALAPPDATA;
+    if (local !== undefined && local.trim() !== '') return path.join(path.resolve(local), 'md');
+  }
   return path.join(homedir(), '.local', 'state', 'md');
 }
 

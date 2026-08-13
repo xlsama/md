@@ -218,6 +218,23 @@ launchd plist：Label `dev.md.daemon`，`ProgramArguments` 用绝对路径（`pr
 - 版本与发版：root `release` 脚本用 `bumpp`（升级版本 + 自动打 tag），root 维护 `CHANGELOG.md`。
 - README 简短中英双语；`@md/server` 包更名为 `@xlsama/md`（web 侧 import 同步改 `@xlsama/md/protocol`）。
 
+## 单文件二进制分发（2026-08-13 定稿）
+
+目标：用户不装 Bun 也能用。`bun build --compile` 把 Bun runtime、应用代码、前端产物打进一个可执行文件。
+
+- **构建入口**：`scripts/gen-assets.ts` 扫描 `web-dist`（开发态回落 `packages/web/dist`），在 `.gen/` 下生成 `assets.ts`（逐个 `import … with { type: 'file' }` 后调用 `setEmbeddedAssets`）和 `entry.ts`（先引 assets 再引 `src/cli.ts`）。`.gen/` 不入库且不在 `tsconfig` 的 `include` 内——否则 `tsc` 会对 Bun 专有的 import attributes 报错。
+- **静态资源三级回退**（`src/assets.ts`）：嵌入表 → 包内 `web-dist` → 仓库 `packages/web/dist`。Bun 嵌入时会扁平化并加 hash（`assets/x-abc.js` → `/$bunfs/root/x-abc-hash.js`），原始相对路径只能靠这张表还原；扩展名保留，`contentTypeFor` 不受影响。
+- **oxfmt 的可选 prettier 插件必须 `--external`**（7 个，见 `scripts/build-binary.ts`）：它们没装，而 bundler 会急切解析惰性 import，否则编译直接失败。
+- **不能交叉编译**：`autocorrect-node` / `oxfmt` 是 NAPI 原生模块，`node_modules` 里只有宿主平台的 `.node`。`--target=bun-linux-x64` 能产出 ELF，但嵌进去的仍是宿主平台的原生模块，一跑就崩。每个目标平台必须在对应 runner 上原生构建。
+- **体积**：约 97 MB（Bun runtime ~60 MB + 前端产物 16 MB + 原生模块）。
+- **服务安装形态自适应**：`serviceArgv()` 在二进制里只用 `process.execPath`，源码形态才拼 `bun + cli.ts`；判据是磁盘上是否存在 `cli.ts`（编译后 `import.meta.dir` 指向虚拟文件系统）。
+
+跨平台适配（同批完成）：
+
+- **开机自启**（`src/service.ts`）：macOS launchd plist + `launchctl bootstrap`；Linux systemd user unit（`~/.config/systemd/user/md.service`）+ `systemctl --user enable --now`；Windows 计划任务 `schtasks /SC ONLOGON`。不引第三方库（`auto-launch` 一类面向 GUI 应用且久未维护）。`md service plist` 更名为 `md service config`，保留 `plist` 别名。
+- **平台路径**：状态目录 Windows 用 `%LOCALAPPDATA%\md`，其余 `~/.local/state/md`；配置目录优先 `XDG_CONFIG_HOME`，Windows 回落 `%APPDATA%`，其余 `~/.config`。打开浏览器：darwin `open`、win32 `cmd /c start ""`、其余 `xdg-open`。
+- Linux / Windows 的运行时行为未在本机验证，只保证能编译。
+
 ## 块级链接富展示（embed + 站点卡片，2026-08-13 定稿）
 
 **识别规则（纯渲染层，markdown 源文件永远只存裸 URL，可移植）**：「独占一个段落的裸链接」按域名分流：

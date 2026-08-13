@@ -20,7 +20,14 @@ import {
 import { formatMarkdown } from '../src/format.ts';
 import { settingsPath } from '../src/settings.ts';
 import { hashContent, setDeleter } from '../src/files.ts';
-import { buildPlist, defaultPlistOptions, plistPath } from '../src/service.ts';
+import {
+  buildPlist,
+  buildSystemdUnit,
+  defaultPlistOptions,
+  defaultSystemdOptions,
+  plistPath,
+  windowsTaskCommand,
+} from '../src/service.ts';
 import type { ClientMessage, ServerMessage, ServerMessageOf, ServerMessageType, TreeNode } from '../src/protocol.ts';
 
 const tmpBase = await fs.mkdtemp(path.join(os.tmpdir(), 'md-e2e-'));
@@ -480,6 +487,25 @@ describe('service', () => {
   test('buildPlist omits --port when unset', () => {
     const plist = buildPlist(defaultPlistOptions());
     expect(plist).not.toContain('--port');
+  });
+
+  test('buildSystemdUnit renders a user unit', () => {
+    const unit = buildSystemdUnit(defaultSystemdOptions(3993));
+    expect(unit).toContain('[Service]');
+    expect(unit).toContain('ExecStart=');
+    expect(unit).toContain('daemon --port 3993');
+    expect(unit).toContain('Restart=always');
+    expect(unit).toContain('WantedBy=default.target');
+    expect(unit).toContain(`StandardOutput=append:${path.join(ROOT, 'state', 'daemon.log')}`);
+  });
+
+  test('buildSystemdUnit quotes executables containing spaces', () => {
+    const unit = buildSystemdUnit({ argv: ['/opt/my apps/md', 'daemon'], logFile: '/tmp/md.log' });
+    expect(unit).toContain('ExecStart="/opt/my apps/md" daemon');
+  });
+
+  test('windowsTaskCommand keeps the daemon subcommand and port', () => {
+    expect(windowsTaskCommand(3993)).toContain('daemon --port 3993');
   });
 });
 

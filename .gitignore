@@ -9,6 +9,8 @@ coverage/
 .env
 .env.local
 packages/md/web-dist/
+packages/md/.gen/
+packages/md/dist/
 packages/md/README.md
 packages/md/LICENSE
 *.tgz
