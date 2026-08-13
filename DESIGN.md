@@ -132,7 +132,7 @@ Client → Server：
 
 ## 同步与冲突模型（关键决策）
 
-1. **保存链路**：编辑 → 防抖 500ms → `save{content, baseHash}` → 服务端校验 hash → **格式化管线** → **再校验一次磁盘 hash** → 写盘 → 记录 echo → 回 `saved{content(格式化后), hash}`；同文件的其他客户端收 `external`。
+1. **保存链路**：编辑 → 防抖 `saveDebounceMs`（默认 100ms） → `save{content, baseHash}` → 服务端校验 hash → **格式化管线** → **再校验一次磁盘 hash** → 写盘 → 记录 echo → 回 `saved{content(格式化后), hash}`；同文件的其他客户端收 `external`。
    第二次校验是必须的：格式化是异步的（autocorrect + oxfmt），这段时间足够 agent 落一次写入，只查一次就会把它静默覆盖掉。第二次不符同样回 `conflict` 并**丢弃本次写入**（磁盘保留外部内容）。`force-save` 两次校验都跳过。
 2. **格式化管线**（仅浏览器保存触发，agent/外部写入**永不**被主动改写）：
    `autocorrect-node.formatFor(text, path)` → `oxfmt.format(path, text)`，**顺序固定 autocorrect 在前**（先插空格再排版，表格对齐/换行才正确）。oxfmt 返回 errors 非空时降级用 autocorrect 结果写盘，不阻塞保存。磁盘上的文件因此永远是格式化后的。
@@ -149,7 +149,7 @@ Meowdown 是非受控组件：`<MeowdownEditor initialMarkdown={…} handleRef={
 `ref.current`: `getMarkdown() / setMarkdown() / getSelection() / setSelection() / getState() / setState()`；变更通知 `onDocChange`（无参，需自己 `getMarkdown()`）；程序化 setMarkdown 不触发 onDocChange。
 
 - **切文件**：flush 未决保存 → 对新文件 `setMarkdown(content)`（同一编辑器实例，不 remount）。
-- **保存**：`onDocChange` → 标脏 → 防抖 500ms → `getMarkdown()` 发 `save`。`Cmd+S` flush 立即保存。
+- **保存**：`onDocChange` → 标脏 → 防抖 `saveDebounceMs`（默认 100ms） → `getMarkdown()` 发 `save`。`Cmd+S` flush 立即保存。
 - **格式化空闲回灌**：收到 `saved` 后若 `saved.content !== 发送的 content`，暂存 pendingFormatted。在「停止输入 2s / Cmd+S / 切文件 / 编辑器失焦」且此后无新编辑时：`getSelection()` → `setMarkdown(saved.content)` → `setSelection`（越界则 clamp 到文档尾）→ 更新 baseHash。有新编辑则丢弃 pending，等下一轮保存。
 - **渲染模式**：编辑器固定 `mode="focus"`（Typora 式「光标处显源码」）。**没有 focus / show / hide 三模式切换**——切换器做过又移除了，三选一里另外两个没人用。**不做 Source 源码模式**。
 - **只读开关**：TopBar 有一个只读切换（`readOnly` 传给编辑器），状态存 localStorage `md:read-only`。它只挡输入，不改渲染模式。
@@ -158,7 +158,7 @@ Meowdown 是非受控组件：`<MeowdownEditor initialMarkdown={…} handleRef={
 - **图片占位态**（`image-loading.ts` + `lib/image-status.ts`）：加载中流光骨架、失败换成图标+「图片加载失败」卡片，都写在 `data-md-img` 上。规则：**新出现的图片一律以 loading 起步**；只有「这个元素当前的 src 真的 error 了」才进失败态——`error` 事件延后一个 task 再按当时的 src 复核，src 在中途被改写（相对路径 resolve 前后是两个 src）时那次 error 直接作废。失败态**忽略**持久化的 `data-width/height`（那尺寸描述的是一张不存在的图），统一用标准占位框；加载中仍尊重持久化尺寸，免得图进来时跳版。
 - **块级媒体宽度**：图片 / 视频 / 推文 / 站点卡片共用 `--md-media-width: min(390px, 100%)`，边缘在正文列里对齐。用户手动拖过的尺寸继续尊重，上限是正文列宽（resizable root 自带 `max-width: 100%`，天然被容器夹住）。
 - **粘贴图片**：拦截 paste/drop 中的图片（Meowdown 若有 upload/file 回调 prop 优先走它，没有则在容器上拦 paste 事件）→ `POST /api/assets`（multipart：file + docPath）→ 服务端存 `<doc 所在目录>/assets/<yyyyMMdd-HHmmss>-<原名或 pasted.png>` → 返回相对路径 → 编辑器光标处插入 ``。
-- **粘贴转存远程图片**（`importPastedImages` 开关，默认开）：容器 paste 事件 capture 阶段读剪贴板文本（不动粘贴本身），提取其中的远程图片 URL（markdown `![]()` 与 `<img src>`，单次上限 50、去重）→ 逐个 `POST /api/assets/import`（并发 3）→ daemon 按 link-meta 同款 SSRF 规则下载（仅 http(s)、逐跳查重定向、必须声明 image/* 类型、20MB 上限）存进 assetsDir，文件名 `<时间戳>-<URL哈希前8>.<扩展名>` → 前端把编辑器文档里的该 URL **按字面文本替换**为本地相对路径（正常 transaction：可撤销、光标经 mapping 保持、触发自动保存）。文档已切换/已编辑掉 URL 时替换自然落空。失败静默保留原链接，最后汇总一条 toast。动机：粘贴来的图片链接（飞书/Notion/带签名的 CDN）会过期，本地才留得住。
+- **粘贴转存远程图片**（`importPastedImages` 开关，默认关）：容器 paste 事件 capture 阶段读剪贴板文本（不动粘贴本身），提取其中的远程图片 URL（markdown `![]()` 与 `<img src>`，单次上限 50、去重）→ 逐个 `POST /api/assets/import`（并发 3）→ daemon 按 link-meta 同款 SSRF 规则下载（仅 http(s)、逐跳查重定向、必须声明 image/* 类型、20MB 上限）存进 assetsDir，文件名 `<时间戳>-<URL哈希前8>.<扩展名>` → 前端把编辑器文档里的该 URL **按字面文本替换**为本地相对路径（正常 transaction：可撤销、光标经 mapping 保持、触发自动保存）。文档已切换/已编辑掉 URL 时替换自然落空。失败静默保留原链接，最后汇总一条 toast。动机：粘贴来的图片链接（飞书/Notion/带签名的 CDN）会过期，本地才留得住。
 - **TOC**：对当前 markdown 提取标题行（跳过 code fence 内），点击 → 编辑器 DOM 里第 n 个对应 heading 元素 `scrollIntoView`。
 - **暗色模式**：由「设置系统」的 `theme` 决定。三方样式（meowdown、@pierre/trees、@pierre/diffs）的颜色都是 `light-dark()` 对，因此强制主题只需在 `html` 上钉住 `color-scheme`；`system` 时移除该属性，回到 `prefers-color-scheme`。
 
@@ -257,15 +257,16 @@ Linux / Windows 的运行时行为未在开发机上验证，只保证类型检�
   - `format.oxfmt`: boolean（默认 true，同上）
   - `assetsDir`: string（默认 `assets`，`/api/assets` 使用；校验单段合法目录名）
   - `linkEmbeds`: boolean（默认 true，关掉后独占段落链接只渲染普通链接，前端渲染层读取）
-  - `importPastedImages`: boolean（默认 true，粘贴时转存远程图片，见「粘贴转存远程图片」）
-  - `saveDebounceMs`: number（默认 500，范围 100–5000，前端 session 读取）
+  - `importPastedImages`: boolean（默认 false，粘贴时转存远程图片，见「粘贴转存远程图片」）
+  - `saveDebounceMs`: number（默认 100，范围 100–5000，前端 session 读取）
   - `sidebarOpen`: boolean（默认 false，侧栏折叠状态；由 TopBar 的开关静默写入，不出现在设置 dialog 里）
   - `sidebarOpen`: boolean（默认 **false**——首屏侧栏收起、正文居中；TopBar 最左侧 panel-left 按钮切换，静默 PUT 持久化；**不进设置 dialog 表单**，无响应式行为，只认配置）
 - **UI**：
   - 侧栏底部两个 icon 按钮（与上方按钮同款交互）：**主题切换**（太阳/月亮两态切换 light/dark；settings 里选了 system 则按钮从当前系统态起切）与**设置**（打开 dialog）
   - 设置 dialog：左侧 tabs（外观 / 编辑器）+ 右侧内容，**没有保存按钮**——改了就写：开关/主题点一下即落盘，输入框停手 400ms 落盘；关闭（左上角 ✕ / Esc / 点外面）会把还没到期的那次立刻写掉。成功不弹 toast（控件自己动了就是回执），失败才弹并把控件退回生效中的值
   - 半截的输入不写盘：非法字段（空目录名、超范围毫秒数）显示行内错误并**只跳过它自己**，同时改的其它字段照常保存；离开输入框时该字段退回生效值
-  - 外观 tab：主题三选（系统/亮/暗）。编辑器 tab：autocorrect 开关、oxfmt 开关、图片目录名、链接卡片开关、自动保存防抖时长
+  - 外观 tab：主题三选（系统/亮/暗）。编辑器 tab：中英文排版（autocorrect）开关、Markdown 排版（oxfmt）开关、图片目录名、粘贴时转存图片开关、链接卡片开关、自动保存防抖时长
+  - 面板上只出现设置**做什么**，工具名（autocorrect/oxfmt）留在标题之外——用的人关心的是「中英文之间会不会插空格」，不是谁插的
 - daemon 端消费（format 开关、assetsDir）在 PUT 后热生效，无需重启。
 
 ## 非目标（v1 不做）

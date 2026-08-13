@@ -932,8 +932,8 @@ describe('settings', () => {
       format: { autocorrect: true, oxfmt: true },
       assetsDir: 'assets',
       linkEmbeds: true,
-      importPastedImages: true,
-      saveDebounceMs: 500,
+      importPastedImages: false,
+      saveDebounceMs: 100,
       sidebarOpen: false,
       sidebarWidth: 256,
     });
@@ -1072,7 +1072,7 @@ describe('settings', () => {
       const res = await fetch(`${restarted.url}/api/settings`);
       const body = settingsSchema.parse(await res.json());
       expect(body.theme).toBe('light');
-      expect(body.saveDebounceMs).toBe(500);
+      expect(body.saveDebounceMs).toBe(100);
       expect(body).toEqual({ ...DEFAULT_SETTINGS, theme: 'light' });
     } finally {
       await restarted.stop();

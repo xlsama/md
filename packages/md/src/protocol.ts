@@ -137,12 +137,12 @@ export const settingsSchema = z.object({
   linkEmbeds: z.boolean().catch(true),
   /**
    * Whether pasting Markdown that points at remote images downloads them into
-   * `assetsDir` and rewrites the links. On by default because pasted image
-   * URLs — Feishu, Notion, CDN links with signed tokens — tend to expire out
-   * from under the document.
+   * `assetsDir` and rewrites the links. Off by default: a paste that quietly
+   * reaches out to the network and writes files is not what pasting normally
+   * does, so it is asked for rather than assumed.
    */
-  importPastedImages: z.boolean().catch(true),
-  saveDebounceMs: saveDebounceMsSchema.catch(500),
+  importPastedImages: z.boolean().catch(false),
+  saveDebounceMs: saveDebounceMsSchema.catch(SAVE_DEBOUNCE_MIN),
   /**
    * UI state rather than a preference, but it lives here so the sidebar is in
    * the same shape on the next launch. Deliberately absent from the settings

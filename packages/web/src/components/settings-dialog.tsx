@@ -304,12 +304,12 @@ export function SettingsDialog() {
             ) : (
               <div className="divide-y divide-[var(--md-border)]">
                 <Field
-                  title="autocorrect"
+                  title="中英文排版"
                   hint="保存时自动在中英文之间插入空格、规范标点。"
                   control={
                     <Switch
                       checked={form.autocorrect}
-                      label="autocorrect"
+                      label="中英文排版"
                       onChange={(autocorrect) => {
                         choose({ autocorrect });
                       }}
@@ -317,12 +317,12 @@ export function SettingsDialog() {
                   }
                 />
                 <Field
-                  title="oxfmt"
-                  hint="保存时排版 Markdown：列表符号、表格对齐、换行。"
+                  title="Markdown 排版"
+                  hint="保存时统一列表符号、对齐表格、规整换行。"
                   control={
                     <Switch
                       checked={form.oxfmt}
-                      label="oxfmt"
+                      label="Markdown 排版"
                       onChange={(oxfmt) => {
                         choose({ oxfmt });
                       }}
