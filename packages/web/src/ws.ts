@@ -1,4 +1,4 @@
-import { serverMessageSchema, type ClientMessage, type ServerMessage } from 'mdopen/protocol';
+import { serverMessageSchema, type ClientMessage, type ServerMessage } from 'writedown/protocol';
 
 const RECONNECT_DELAY = 1000;
 

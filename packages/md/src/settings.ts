@@ -14,7 +14,7 @@ export function configDir(): string {
   if (override !== undefined && override !== '') return path.resolve(override);
   const xdg = process.env.XDG_CONFIG_HOME;
   const base = xdg !== undefined && xdg.trim() !== '' ? path.resolve(xdg) : path.join(homedir(), '.config');
-  return path.join(base, 'mdopen');
+  return path.join(base, 'writedown');
 }
 
 export function settingsPath(): string {

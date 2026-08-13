@@ -16,7 +16,7 @@ const MEMORY_LIMIT = 512;
 const TITLE_LIMIT = 300;
 const DESCRIPTION_LIMIT = 600;
 const USER_AGENT =
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36 mdopen-link-preview';
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36 writedown-link-preview';
 
 /** A URL we refuse to fetch at all — bad scheme, or a host that names the machine itself. */
 export class LinkTargetError extends Error {}

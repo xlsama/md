@@ -1,4 +1,4 @@
-# mdopen
+# writedown
 
 在浏览器里编辑本地 Markdown 文件。一条 `md` 命令，文件读写走本地常驻服务，浏览器端零权限弹窗；AI agent 改动实时同步进编辑器，保存自动排版。
 
@@ -12,21 +12,22 @@ Edit local Markdown files in your browser. One `md` command — a tiny local dae
 - **Typora 式所见即所得** — [Meowdown](https://github.com/prosekit/meowdown) 混合渲染，focus / show / hide 三种语法可见度 / hybrid WYSIWYG rendering
 - **保存即格式化** — [autocorrect](https://github.com/huacnlee/autocorrect)（中英文空格）+ [oxfmt](https://github.com/oxc-project/oxfmt)（Markdown 排版），磁盘永远整洁，回灌不打断输入 / every save runs autocorrect + oxfmt; reflow never interrupts typing
 - **与 AI agent 共同编辑** — 外部改动实时刷新；冲突时并排 diff 选边 / live sync with external edits, side-by-side diff on conflict
-- **文件树 / 全文搜索（ripgrep）/ 大纲 / wikilink / 图片粘贴 / 暗色模式**
+- **链接卡片** — 独占段落的 YouTube/X/网站链接渲染为播放器、推文卡、站点卡片，文件里仍是纯 URL / rich link cards while markdown stays plain URLs
+- **文件树（内联新建/重命名）/ 文件名模糊过滤 / 大纲 / wikilink / 图片粘贴 / 设置面板 / 亮暗主题**
 - **开机自启** — `md service install`（macOS launchd）
 
 ## 安装 / Install
 
-需要 [Bun](https://bun.sh) ≥ 1.2；全文搜索需要 [ripgrep](https://github.com/BurntSushi/ripgrep)。Requires Bun ≥ 1.2; full-text search needs ripgrep.
+需要 [Bun](https://bun.sh) ≥ 1.2。Requires Bun ≥ 1.2.
 
 ```bash
-bun add -g mdopen   # or: pnpm add -g mdopen
+bun add -g writedown   # or: pnpm add -g writedown
 ```
 
 升级后无需手动重启：下次运行 `md` 时 CLI 发现常驻 daemon 版本不一致会自动重启它，已打开的页面自动重连。Upgrades are seamless — the next `md` run detects the version mismatch, restarts the daemon, and open tabs reconnect automatically.
 
 ```bash
-bun add -g mdopen@latest   # upgrade
+bun add -g writedown@latest   # upgrade
 ```
 
 ## 使用 / Usage

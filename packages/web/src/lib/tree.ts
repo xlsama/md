@@ -1,4 +1,4 @@
-import type { TreeNode } from 'mdopen/protocol';
+import type { TreeNode } from 'writedown/protocol';
 import { basename, isMarkdown, stripExtension } from './paths.ts';
 
 /**

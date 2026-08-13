@@ -1,4 +1,4 @@
-import type { Theme } from 'mdopen/protocol';
+import type { Theme } from 'writedown/protocol';
 
 export type ResolvedTheme = 'light' | 'dark';
 

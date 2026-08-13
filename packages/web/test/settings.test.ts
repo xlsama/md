@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { DEFAULT_SETTINGS, type Settings } from 'mdopen/protocol';
+import { DEFAULT_SETTINGS, type Settings } from 'writedown/protocol';
 import {
   formErrors,
   formPatch,

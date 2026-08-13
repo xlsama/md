@@ -21,7 +21,7 @@
 ## 技术栈与依赖
 
 - pnpm workspace（root：`pnpm-workspace.yaml`），**所有依赖装 latest**，TypeScript 全程。
-- `packages/md`（包名 `mdopen`，`"bin": {"md": "./src/cli.ts"}`，shebang `#!/usr/bin/env bun`，无构建步骤，bun 直跑 TS）：
+- `packages/md`（包名 `writedown`，`"bin": {"md": "./src/cli.ts"}`，shebang `#!/usr/bin/env bun`，无构建步骤，bun 直跑 TS）：
   - Hono（HTTP 路由）、`Bun.serve` 原生 WebSocket、Zod
   - `oxfmt`（JS API：`format(fileName, text) → Promise<{code, errors}>`，已验证支持 markdown）
   - `autocorrect-node`（NAPI：`formatFor(text, filepath) → string`、`loadConfig(configStr)`）
@@ -57,9 +57,9 @@ md/
 │   │       ├── search.ts      # rg --json 封装
 │   │       ├── service.ts     # launchd plist 生成 / bootstrap / bootout
 │   │       ├── state.ts       # ~/.local/state/md/（state.json、daemon.log、pid）
-│   │       ├── settings.ts    # ~/.config/mdopen/settings.json 读写
+│   │       ├── settings.ts    # ~/.config/writedown/settings.json 读写
 │   │       ├── link-meta.ts   # /api/link-meta：抓取 + SSRF 防护 + 内存/磁盘两级缓存
-│   │       └── protocol.ts    # 全部 Zod schema + TS 类型（web 通过 mdopen/protocol 导入）
+│   │       └── protocol.ts    # 全部 Zod schema + TS 类型（web 通过 writedown/protocol 导入）
 │   └── web/
 │       ├── package.json
 │       ├── vite.config.ts     # dev 时 /api /ws /raw 代理到 daemon
@@ -212,11 +212,11 @@ launchd plist：Label `dev.md.daemon`，`ProgramArguments` 用绝对路径（`pr
 
 ## 发布与开源
 
-- npm 包名 **`mdopen`**（发布 packages/md 单包；`bin` 仍是 `md`），GitHub `xlsama/mdopen`，public，MIT LICENSE。
-- 运行时要求 Bun（bin shebang `#!/usr/bin/env bun`），README 写明 `bun` 为前置依赖，安装方式 `bun add -g mdopen` / `pnpm add -g mdopen`。
+- npm 包名 **`writedown`**（发布 packages/md 单包；`bin` 仍是 `md`），GitHub `xlsama/writedown`，public，MIT LICENSE。
+- 运行时要求 Bun（bin shebang `#!/usr/bin/env bun`），README 写明 `bun` 为前置依赖，安装方式 `bun add -g writedown` / `pnpm add -g writedown`。
 - 前端产物随包分发：`prepublishOnly` 构建 `@md/web` 并把 `dist` 拷入 `packages/md/web-dist/`，daemon 静态目录解析顺序：包内 `web-dist` → 仓库 `packages/web/dist`（开发态）。`files` 白名单：`src`、`web-dist`。
 - 版本与发版：root `release` 脚本用 `bumpp`（升级版本 + 自动打 tag），root 维护 `CHANGELOG.md`。
-- README 简短中英双语；`@md/server` 包更名为 `mdopen`（web 侧 import 同步改 `mdopen/protocol`）。
+- README 简短中英双语；`@md/server` 包更名为 `writedown`（web 侧 import 同步改 `writedown/protocol`）。
 
 ## 块级链接富展示（embed + 站点卡片，2026-08-13 定稿）
 
@@ -234,7 +234,7 @@ launchd plist：Label `dev.md.daemon`，`ProgramArguments` 用绝对路径（`pr
 
 ## 设置系统（2026-08-13 定稿）
 
-- **配置文件**：`~/.config/mdopen/settings.json`（尊重 `$XDG_CONFIG_HOME`，目录自动创建）。扁平 JSON，读取时与默认值合并（缺字段向后兼容），只由 API 写入（外部手改文件 v1 不监听）。
+- **配置文件**：`~/.config/writedown/settings.json`（尊重 `$XDG_CONFIG_HOME`，目录自动创建）。扁平 JSON，读取时与默认值合并（缺字段向后兼容），只由 API 写入（外部手改文件 v1 不监听）。
 - **API**：`GET /api/settings`（默认值合并后的完整配置）+ `PUT /api/settings`（zod 校验、原子写盘）。保存成功后 daemon 广播 `settings` WS 消息，所有页面即时应用。
 - **配置项 v1**：
   - `theme`: `'system' | 'light' | 'dark'`（默认 system）

@@ -1,4 +1,4 @@
-import { linkMetaResponseSchema, type LinkMeta } from 'mdopen/protocol';
+import { linkMetaResponseSchema, type LinkMeta } from 'writedown/protocol';
 
 /**
  * Module-level store for `/api/link-meta` answers.

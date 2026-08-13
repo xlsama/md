@@ -59,7 +59,7 @@ describe('embed routing', () => {
 
   test('a plain site is not an embed, so it falls through to the card', () => {
     expect(matchEmbed('https://example.com')).toBeUndefined();
-    expect(matchEmbed('https://github.com/xlsama/mdopen')).toBeUndefined();
+    expect(matchEmbed('https://github.com/xlsama/writedown')).toBeUndefined();
     // A profile is not a status: only permalinked posts embed.
     expect(matchEmbed('https://x.com/someone')).toBeUndefined();
   });

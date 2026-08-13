@@ -6,7 +6,7 @@ import {
   type HealthResponse,
   type Settings,
   type SettingsPatch,
-} from 'mdopen/protocol';
+} from 'writedown/protocol';
 import { z } from 'zod';
 
 /**

@@ -1,16 +1,16 @@
 {
-  "name": "mdopen",
+  "name": "writedown",
   "version": "0.1.0",
   "description": "Edit local Markdown in your browser: one `md` command, live sync with AI-agent edits, auto-format on save. 浏览器里的本地 Markdown 编辑器。",
   "type": "module",
   "license": "MIT",
   "author": "xlsama",
-  "homepage": "https://github.com/xlsama/mdopen#readme",
+  "homepage": "https://github.com/xlsama/writedown#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/xlsama/mdopen.git"
+    "url": "git+https://github.com/xlsama/writedown.git"
   },
-  "bugs": "https://github.com/xlsama/mdopen/issues",
+  "bugs": "https://github.com/xlsama/writedown/issues",
   "keywords": [
     "markdown",
     "editor",

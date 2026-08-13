@@ -1,4 +1,4 @@
-import type { Theme } from 'mdopen/protocol';
+import type { Theme } from 'writedown/protocol';
 import { useEffect, useState } from 'react';
 import { saveSettings } from '../api.ts';
 import {

@@ -86,9 +86,6 @@ importers:
       fuzzysort:
         specifier: ^4.0.1
         version: 4.0.1
-      mdopen:
-        specifier: workspace:*
-        version: link:../md
       motion:
         specifier: ^13.1.0
         version: 13.1.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -101,6 +98,9 @@ importers:
       shiki:
         specifier: ^4.4.3
         version: 4.4.3
+      writedown:
+        specifier: workspace:*
+        version: link:../md
       zod:
         specifier: ^4.4.3
         version: 4.4.3
