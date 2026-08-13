@@ -1,6 +1,6 @@
 {
   "name": "@xlsama/md",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Edit local Markdown in your browser: one `md` command, live sync with AI-agent edits, auto-format on save. 浏览器里的本地 Markdown 编辑器。",
   "type": "module",
   "license": "MIT",
