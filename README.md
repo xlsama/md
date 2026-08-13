@@ -1,10 +1,10 @@
 # writedown
 
-English | [简体中文](./README_zh.md)
+English | [简体中文](https://github.com/xlsama/writedown/blob/main/README_zh.md)
 
 Edit local Markdown in your browser. One `md` command opens a file or folder: a local daemon does the file I/O (no browser permission prompts), external changes from AI agents sync in live, and every save is auto-formatted.
 
-![writedown](docs/screenshot-en.jpg)
+![writedown](https://raw.githubusercontent.com/xlsama/writedown/main/docs/screenshot-en.jpg)
 
 ## Features
 
@@ -41,4 +41,4 @@ md service uninstall
 
 ## License
 
-[MIT](./LICENSE)
+[MIT](https://github.com/xlsama/writedown/blob/main/LICENSE)
