@@ -1,10 +1,16 @@
 import { icons } from './lib/icons.ts';
 import {
   ImageOutcomeMemo,
+  RetryBudget,
   classifyImage,
   isCurrentFailure,
   type ImageLoadState,
 } from './lib/image-status.ts';
+
+/** How many times a URL may fail before the failure card is believed. */
+const MAX_RETRIES = 2;
+/** Backoff per attempt: pasted images are often just not ready yet upstream. */
+const RETRY_DELAY_MS = [1000, 3000] as const;
 
 /** Attribute the stylesheet keys the skeleton and the failure card off. */
 const STATE_ATTR = 'data-md-img';
@@ -69,6 +75,9 @@ function apply(img: HTMLImageElement, state: ImageLoadState): void {
  *   source the element is pointing at by then. Nothing else distinguishes "this
  *   picture is broken" from "this element was briefly pointed somewhere else",
  *   and the second must never paint.
+ * - A confirmed failure still is not a verdict until the URL has spent its
+ *   retry budget: the first errors buy quiet reloads behind the shimmer, so an
+ *   image that is merely not ready yet upstream never flashes the card.
  *
  * The state lives in `data-md-img`, which is deliberately outside the
  * observer's `attributeFilter`, so writing it cannot feed back into the
@@ -76,9 +85,27 @@ function apply(img: HTMLImageElement, state: ImageLoadState): void {
  */
 export function watchImageLoading(host: HTMLElement): () => void {
   const memo = new ImageOutcomeMemo();
+  const retries = new RetryBudget(MAX_RETRIES);
   /** The source each element last errored on — see `isCurrentFailure`. */
   const failures = new WeakMap<HTMLImageElement, string>();
+  const retryTimers = new Set<ReturnType<typeof setTimeout>>();
   host.style.setProperty(ICON_VAR, iconDataUrl());
+
+  /**
+   * Points the element at its source again after a beat. Dropping the `src`
+   * attribute first is what makes the second assignment a fresh load — a
+   * same-value assignment is ignored — and an element that was rebuilt or
+   * rewritten in the meantime is left alone: the new element loads on its own.
+   */
+  const scheduleRetry = (img: HTMLImageElement, src: string, attempt: number): void => {
+    const timer = setTimeout(() => {
+      retryTimers.delete(timer);
+      if (!img.isConnected || currentSource(img) !== src) return;
+      img.removeAttribute('src');
+      img.src = src;
+    }, RETRY_DELAY_MS[attempt - 1] ?? RETRY_DELAY_MS[RETRY_DELAY_MS.length - 1]);
+    retryTimers.add(timer);
+  };
 
   const onLoad = (event: Event): void => {
     const img = event.target;
@@ -102,6 +129,17 @@ export function watchImageLoading(host: HTMLElement): () => void {
     // error worth believing.
     queueMicrotask(() => {
       if (!isCurrentFailure(failures.get(img), currentSource(img))) return;
+      // A first (or second) failure buys a quiet retry instead of a verdict:
+      // the error is withdrawn so rescans keep showing the shimmer, and the
+      // element is re-pointed at the URL after a beat. Only a URL that has
+      // spent its budget gets the failure card.
+      const attempt = retries.take(failed);
+      if (attempt !== null) {
+        failures.delete(img);
+        apply(img, 'loading');
+        scheduleRetry(img, failed, attempt);
+        return;
+      }
       memo.record(failed, 'failed');
       apply(img, 'failed');
     });
@@ -139,6 +177,8 @@ export function watchImageLoading(host: HTMLElement): () => void {
   return () => {
     host.removeEventListener('load', onLoad, true);
     host.removeEventListener('error', onError, true);
+    for (const timer of retryTimers) clearTimeout(timer);
+    retryTimers.clear();
     observer.disconnect();
   };
 }

@@ -80,6 +80,49 @@ export class ImageOutcomeMemo {
 }
 
 /**
+ * Bounded per-URL retry budget.
+ *
+ * A first `error` is not proof that a URL is broken: a freshly pasted document
+ * often points at images the far end is still producing (Feishu's `asynccode`
+ * endpoints answer the first request with a failure and the retry with the
+ * picture), and a flaky network fails once and then works. Painting the
+ * failure card on that first error is exactly the flash being fixed here — so
+ * an error only becomes a verdict once the URL has used up its retries.
+ *
+ * The budget is keyed by URL rather than element on purpose: mark views are
+ * rebuilt constantly, and a per-element count would reset with every rebuild
+ * and retry forever. Bounded the same way as {@link ImageOutcomeMemo}.
+ */
+export class RetryBudget {
+  private readonly max: number;
+  private readonly limit: number;
+  private readonly attempts = new Map<string, number>();
+
+  constructor(max: number, limit: number = DEFAULT_LIMIT) {
+    this.max = max;
+    this.limit = Math.max(1, limit);
+  }
+
+  /**
+   * Spends one attempt for `src`. Answers the attempt number (1-based) while
+   * the budget lasts, and `null` once it is spent — at which point the failure
+   * is worth believing.
+   */
+  take(src: string): number | null {
+    if (src === '') return null;
+    const used = this.attempts.get(src) ?? 0;
+    if (used >= this.max) return null;
+    this.attempts.delete(src);
+    this.attempts.set(src, used + 1);
+    if (this.attempts.size > this.limit) {
+      const oldest = this.attempts.keys().next();
+      if (oldest.done !== true) this.attempts.delete(oldest.value);
+    }
+    return used + 1;
+  }
+}
+
+/**
  * Which placeholder (if any) an `<img>` should be showing right now.
  *
  * Live pixels win over everything: `complete` with a non-zero `naturalWidth`

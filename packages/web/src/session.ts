@@ -584,10 +584,12 @@ class Session {
     if (!ready) return;
 
     const pending = this.pending;
-    const selection = this.handle.getSelection();
-    // `setState` clamps an out-of-range selection instead of throwing, so a
-    // formatting pass that shortened the document still lands a sane caret.
-    this.handle.setState(pending.content, selection);
+    // No selection is passed on purpose: `setState` then maps the current one
+    // through the replacement instead of re-resolving a pre-format offset —
+    // formatting shifts every position after its first change, so an explicit
+    // selection lands the caret somewhere else and `scrollIntoView` yanks the
+    // page there with it.
+    this.handle.setState(pending.content);
     this.baseHash = pending.hash;
     this.pending = null;
     this.clearTimer('idleTimer');

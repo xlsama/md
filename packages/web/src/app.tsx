@@ -11,6 +11,7 @@ import { Toasts } from './components/toasts.tsx';
 import { Toc, useTocDocked } from './components/toc.tsx';
 import { TopBar } from './components/top-bar.tsx';
 import { readFileParam } from './lib/route.ts';
+import { documentTitle } from './lib/title.ts';
 import { session } from './session.ts';
 import { useStore } from './store.ts';
 import { createWsClient } from './ws.ts';
@@ -119,6 +120,15 @@ function useWatcherWarning(): void {
   }, []);
 }
 
+/** Names the tab after the open document — see `documentTitle`. */
+function useDocumentTitle(): void {
+  const docPath = useStore((s) => s.docPath);
+  const root = useStore((s) => s.root);
+  useEffect(() => {
+    document.title = documentTitle(docPath, root);
+  }, [docPath, root]);
+}
+
 function useSaveShortcut(): void {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -150,6 +160,7 @@ export function App() {
   useFileParam();
   useConnection();
   useWatcherWarning();
+  useDocumentTitle();
   useSaveShortcut();
 
   return (

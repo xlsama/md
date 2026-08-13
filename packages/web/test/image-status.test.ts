@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   ImageOutcomeMemo,
+  RetryBudget,
   classifyImage,
   isCurrentFailure,
   type ImageProbe,
@@ -167,5 +168,30 @@ describe('ImageOutcomeMemo', () => {
     memo.record('c', 'loaded');
     expect(memo.get('a')).toBe('loaded');
     expect(memo.get('b')).toBeUndefined();
+  });
+});
+
+describe('RetryBudget', () => {
+  test('hands out numbered attempts, then refuses', () => {
+    const budget = new RetryBudget(2);
+    expect(budget.take('a')).toBe(1);
+    expect(budget.take('a')).toBe(2);
+    expect(budget.take('a')).toBeNull();
+    // The budget is per URL, not global.
+    expect(budget.take('b')).toBe(1);
+  });
+
+  test('a blank source never gets a retry', () => {
+    const budget = new RetryBudget(2);
+    expect(budget.take('')).toBeNull();
+  });
+
+  test('evicts the oldest URL past the limit, which resets its count', () => {
+    const budget = new RetryBudget(1, 2);
+    expect(budget.take('a')).toBe(1);
+    expect(budget.take('b')).toBe(1);
+    expect(budget.take('c')).toBe(1);
+    // `a` was evicted to make room, so a new failure starts a fresh budget.
+    expect(budget.take('a')).toBe(1);
   });
 });
