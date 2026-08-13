@@ -13,6 +13,11 @@ describe('dragSidebar', () => {
     expect(dragSidebar(256, -100).width).toBe(SIDEBAR_MIN_WIDTH);
   });
 
+  test('a trackpad’s fractional pointer still lands on a whole pixel', () => {
+    // The settings schema stores integers; a fractional width would fail to save.
+    expect(dragSidebar(256, 40.58)).toEqual({ width: 297, collapse: false });
+  });
+
   test('a pull well past the minimum becomes a close', () => {
     // Narrower than the tree can be, but not yet far enough to mean it.
     expect(dragSidebar(256, -(256 - SIDEBAR_COLLAPSE_WIDTH))).toEqual({

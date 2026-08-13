@@ -32,7 +32,9 @@ export interface SidebarDrag {
 export function dragSidebar(startWidth: number, dx: number): SidebarDrag {
   const raw = startWidth + dx;
   return {
-    width: Math.min(Math.max(raw, SIDEBAR_MIN_WIDTH), SIDEBAR_MAX_WIDTH),
+    // Rounded because trackpads report fractional positions, and the settings
+    // schema only stores whole pixels — a fractional width would fail to save.
+    width: Math.round(Math.min(Math.max(raw, SIDEBAR_MIN_WIDTH), SIDEBAR_MAX_WIDTH)),
     collapse: raw < SIDEBAR_COLLAPSE_WIDTH,
   };
 }

@@ -83,42 +83,22 @@ const TREE_ICONS = { set: 'none' } as const;
  * rather than straddling its border, because the panel clips its own overflow
  * while collapsing.
  */
+/** Leftwards is outwards — and so widening — once the interface is mirrored. */
+function dragDirection(dx: number): number {
+  return document.dir === 'rtl' ? -dx : dx;
+}
+
 function SidebarResizer({
   width,
-  onDrag,
-  onDrop,
+  dragging,
+  onStart,
+  onNudge,
 }: {
   width: number;
-  onDrag: (drag: SidebarDrag) => void;
-  onDrop: () => void;
+  dragging: boolean;
+  onStart: (x: number) => void;
+  onNudge: (step: number) => void;
 }) {
-  const [dragging, setDragging] = useState(false);
-  const from = useRef<{ x: number; width: number } | null>(null);
-
-  // The pointer spends a drag well outside the handle, and every element it
-  // crosses would otherwise impose its own cursor — and take the text under it
-  // into a selection.
-  useEffect(() => {
-    if (!dragging) return undefined;
-    const { style } = document.body;
-    const cursor = style.cursor;
-    const select = style.userSelect;
-    style.cursor = 'col-resize';
-    style.userSelect = 'none';
-    return () => {
-      style.cursor = cursor;
-      style.userSelect = select;
-    };
-  }, [dragging]);
-
-  const stop = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (from.current === null) return;
-    from.current = null;
-    event.currentTarget.releasePointerCapture(event.pointerId);
-    setDragging(false);
-    onDrop();
-  };
-
   return (
     <div
       role="separator"
@@ -132,20 +112,8 @@ function SidebarResizer({
         if (event.button !== 0) return;
         // Otherwise the press starts a text selection in the tree behind it.
         event.preventDefault();
-        from.current = { x: event.clientX, width };
-        event.currentTarget.setPointerCapture(event.pointerId);
-        setDragging(true);
+        onStart(event.clientX);
       }}
-      onPointerMove={(event) => {
-        const start = from.current;
-        if (start === null) return;
-        const dx = event.clientX - start.x;
-        // Dragging outwards is what widens the panel, and outwards is leftwards
-        // once the interface is mirrored.
-        onDrag(dragSidebar(start.width, document.dir === 'rtl' ? -dx : dx));
-      }}
-      onPointerUp={stop}
-      onPointerCancel={stop}
       // The same edge for keyboards, in steps rather than pixels. A step that
       // would take it past the minimum stops there; closing the panel is what
       // the toolbar's own toggle is for.
@@ -153,8 +121,7 @@ function SidebarResizer({
         const step = event.key === 'ArrowLeft' ? -16 : event.key === 'ArrowRight' ? 16 : 0;
         if (step === 0) return;
         event.preventDefault();
-        onDrag(dragSidebar(width, document.dir === 'rtl' ? -step : step));
-        onDrop();
+        onNudge(dragDirection(step));
       }}
       className="group absolute inset-y-0 end-0 z-10 w-1.5 cursor-col-resize"
     >
@@ -165,6 +132,74 @@ function SidebarResizer({
       />
     </div>
   );
+}
+
+/**
+ * The drag itself: live width while the pointer is down, committed on release.
+ *
+ * The pointer is tracked on the window rather than on the handle, which spends
+ * most of a drag nowhere near the pointer and is not even on screen once the
+ * drag has pulled the panel shut. That also takes the cursor and the text
+ * selection off every element the pointer crosses on the way.
+ */
+function useSidebarDrag(width: number, commit: (drag: SidebarDrag) => void) {
+  const [origin, setOrigin] = useState<{ x: number; width: number } | null>(null);
+  const [drag, setDrag] = useState<SidebarDrag | null>(null);
+  /** The last position handed to `setDrag`, readable from the release handler. */
+  const latest = useRef<SidebarDrag | null>(null);
+
+  const start = useCallback(
+    (x: number) => {
+      setOrigin({ x, width });
+    },
+    [width]
+  );
+
+  useEffect(() => {
+    if (origin === null) return undefined;
+
+    const move = (event: PointerEvent) => {
+      const next = dragSidebar(origin.width, dragDirection(event.clientX - origin.x));
+      latest.current = next;
+      setDrag(next);
+    };
+    const end = () => {
+      const final = latest.current;
+      latest.current = null;
+      setOrigin(null);
+      setDrag(null);
+      if (final !== null) commit(final);
+    };
+
+    const { style } = document.body;
+    const cursor = style.cursor;
+    const select = style.userSelect;
+    style.cursor = 'col-resize';
+    style.userSelect = 'none';
+
+    // An embed is its own document: pointer events over an iframe go to it,
+    // not to this window, so the drag would go dead — and never see its
+    // release — the moment the pointer crossed one.
+    const frames = Array.from(document.querySelectorAll('iframe'));
+    const shields = frames.map((frame) => frame.style.pointerEvents);
+    for (const frame of frames) frame.style.pointerEvents = 'none';
+
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+      frames.forEach((frame, i) => {
+        frame.style.pointerEvents = shields[i] ?? '';
+      });
+      style.cursor = cursor;
+      style.userSelect = select;
+    };
+  }, [origin, commit]);
+
+  return { drag, dragging: origin !== null, start };
 }
 
 /** Whether the file tree is on screen — the toolbar toggle reads it too. */
@@ -444,8 +479,15 @@ export function Sidebar() {
     SIDEBAR_NARROW_QUERY,
     useStore((s) => s.setSidebarNarrow)
   );
-  /** Non-null only while the edge is being dragged; it outranks the stored width. */
-  const [drag, setDrag] = useState<SidebarDrag | null>(null);
+  const commitDrag = useCallback(
+    (final: SidebarDrag) => {
+      if (final.collapse) writeSettings({ sidebarOpen: false });
+      else if (final.width !== storedWidth) writeSettings({ sidebarWidth: final.width });
+    },
+    [storedWidth]
+  );
+  /** `drag` is non-null only mid-drag, and outranks the stored width while it is. */
+  const { drag, dragging, start } = useSidebarDrag(storedWidth, commitDrag);
   const width = drag?.width ?? storedWidth;
   // A drag held past the collapse point previews the close it would commit to.
   const open = useSidebarShown() && drag?.collapse !== true;
@@ -717,17 +759,11 @@ export function Sidebar() {
       initial={false}
       animate={{ width: open ? width : 0 }}
       // A dragged edge has to sit under the pointer, not chase it.
-      transition={drag === null ? { duration: 0.22, ease: [0.4, 0, 0.2, 1] } : { duration: 0 }}
+      transition={dragging ? { duration: 0 } : { duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+      inert={open ? undefined : true}
       className="relative shrink-0 overflow-hidden bg-[var(--md-panel)]"
     >
-      {/* The column is inert while collapsed rather than the panel itself: a
-          drag held past the collapse point still has to reach the handle it
-          started on, and that handle is a sibling of this. */}
-      <div
-        style={{ width }}
-        inert={open ? undefined : true}
-        className="flex h-full flex-col border-r border-[var(--md-border)]"
-      >
+      <div style={{ width }} className="flex h-full flex-col border-r border-[var(--md-border)]">
         <div className="flex h-11 shrink-0 items-center gap-1 px-3">
           <span
             className="min-w-0 flex-1 truncate text-xs font-medium text-[var(--md-muted)]"
@@ -852,17 +888,13 @@ export function Sidebar() {
         <SidebarFooter />
       </div>
 
-      {/* Kept mounted for the length of a collapsing drag: it is the element
-          holding the pointer capture, and losing it would drop the drag. */}
-      {(open || drag !== null) && (
+      {open && (
         <SidebarResizer
           width={width}
-          onDrag={setDrag}
-          onDrop={() => {
-            if (drag === null) return;
-            setDrag(null);
-            if (drag.collapse) writeSettings({ sidebarOpen: false });
-            else if (drag.width !== storedWidth) writeSettings({ sidebarWidth: drag.width });
+          dragging={dragging}
+          onStart={start}
+          onNudge={(step) => {
+            commitDrag(dragSidebar(width, step));
           }}
         />
       )}
