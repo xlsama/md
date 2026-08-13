@@ -9,58 +9,20 @@ import { DEFAULT_SETTINGS, settingsSchema, type Settings, type SettingsPatch } f
  * throwaway runtime bookkeeping. `MD_CONFIG_DIR` overrides everything so a test
  * (or a second daemon) can run against its own file.
  */
-function configHome(): string {
-  const xdg = process.env.XDG_CONFIG_HOME;
-  if (xdg !== undefined && xdg.trim() !== '') return path.resolve(xdg);
-  if (process.platform === 'win32') {
-    const appData = process.env.APPDATA;
-    if (appData !== undefined && appData.trim() !== '') return path.resolve(appData);
-  }
-  return path.join(homedir(), '.config');
-}
-
 export function configDir(): string {
   const override = process.env.MD_CONFIG_DIR;
   if (override !== undefined && override !== '') return path.resolve(override);
-  return path.join(configHome(), 'md');
+  const xdg = process.env.XDG_CONFIG_HOME;
+  if (xdg !== undefined && xdg.trim() !== '') return path.join(path.resolve(xdg), 'md');
+  if (process.platform === 'win32') {
+    const appData = process.env.APPDATA;
+    if (appData !== undefined && appData.trim() !== '') return path.join(path.resolve(appData), 'md');
+  }
+  return path.join(homedir(), '.config', 'md');
 }
 
 export function settingsPath(): string {
   return path.join(configDir(), 'settings.json');
-}
-
-/** The pre-0.1.3 location, back when the project was still called writedown. */
-function legacySettingsPath(): string | null {
-  const override = process.env.MD_CONFIG_DIR;
-  // An explicit directory has no history to inherit from.
-  if (override !== undefined && override !== '') return null;
-  return path.join(configHome(), 'writedown', 'settings.json');
-}
-
-async function exists(file: string): Promise<boolean> {
-  return fs.access(file).then(
-    () => true,
-    () => false,
-  );
-}
-
-/**
- * Moves the settings file from the old `writedown` directory to `md`, once.
- * Anything unexpected — no legacy file, a file already at the new path, an
- * unwritable directory — leaves both sides untouched: losing a user's settings
- * to a rename is far worse than starting over from the defaults.
- */
-export async function migrateLegacySettings(): Promise<void> {
-  const file = settingsPath();
-  if (await exists(file)) return;
-  const legacy = legacySettingsPath();
-  if (legacy === null || !(await exists(legacy))) return;
-  try {
-    await fs.mkdir(path.dirname(file), { recursive: true });
-    await fs.rename(legacy, file);
-    // Only removes the old directory when the move emptied it.
-    await fs.rmdir(path.dirname(legacy)).catch(() => {});
-  } catch {}
 }
 
 /**
@@ -80,7 +42,6 @@ function fromCache(): Settings | null {
  * outcome is always a complete configuration.
  */
 export async function loadSettings(): Promise<Settings> {
-  await migrateLegacySettings();
   const file = settingsPath();
   let raw: unknown = null;
   try {

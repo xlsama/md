@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.4
+
+移除 0.1.3 的配置目录迁移逻辑 / Dropped the config directory migration added in 0.1.3.
+
 ## 0.1.3
 
 新增 `md config` 打印配置文件路径与内容，配置目录由 `~/.config/writedown` 改为 `~/.config/md`（旧文件自动搬迁），CLI 帮助改为英文 / Added `md config` to print the settings file path and contents, moved the config directory from `~/.config/writedown` to `~/.config/md` (existing files migrate automatically), and switched the CLI help to English.

@@ -8,7 +8,7 @@ import {
   openResponseSchema,
   type HealthResponse,
 } from './protocol.ts';
-import { migrateLegacySettings, settingsPath } from './settings.ts';
+import { settingsPath } from './settings.ts';
 import { ensureStateDir, logPath, readState, resolvePort } from './state.ts';
 import { runDaemonForeground } from './daemon.ts';
 import { installService, serviceConfig, uninstallService } from './service.ts';
@@ -184,10 +184,6 @@ async function commandOpen(target: string | undefined, port: number): Promise<vo
 }
 
 async function commandConfig(): Promise<void> {
-  // `md config` can be the first thing a user runs after an upgrade, before any
-  // daemon started, so it moves the old file itself rather than reporting the
-  // new path as empty while the settings still sit under `writedown`.
-  await migrateLegacySettings();
   const file = settingsPath();
   console.log(`# ${file}`);
   let raw: string | null = null;

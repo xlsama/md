@@ -246,7 +246,7 @@ Linux / Windows 的运行时行为未在开发机上验证，只保证类型检�
 
 ## 设置系统（2026-08-13 定稿）
 
-- **配置文件**：`~/.config/md/settings.json`（尊重 `$XDG_CONFIG_HOME`，目录自动创建；0.1.3 前在 `writedown/`，首次读取时自动搬迁）。扁平 JSON，读取时与默认值合并（缺字段向后兼容），只由 API 写入（外部手改文件 v1 不监听）。
+- **配置文件**：`~/.config/md/settings.json`（尊重 `$XDG_CONFIG_HOME`，目录自动创建）。扁平 JSON，读取时与默认值合并（缺字段向后兼容），只由 API 写入（外部手改文件 v1 不监听）。
 - **API**：`GET /api/settings`（默认值合并后的完整配置）+ `PUT /api/settings`（zod 校验、原子写盘）。保存成功后 daemon 广播 `settings` WS 消息，所有页面即时应用。
 - **配置项 v1**：
   - `theme`: `'system' | 'light' | 'dark'`（默认 system）
