@@ -1,7 +1,34 @@
 import { basename } from '../lib/paths.ts';
 import { useStore, writeSettings } from '../store.ts';
+import { useAnchoredTooltip } from './anchored-tooltip.tsx';
 import { useSidebarShown } from './file-tree.tsx';
 import { IconButton } from './icon-button.tsx';
+
+/**
+ * The dot is small, so the hover target is the padded box around it — the same
+ * box an icon button occupies, which also keeps it aligned with its neighbours.
+ */
+function DisconnectedDot() {
+  const { ref, handlers, tip } = useAnchoredTooltip<HTMLSpanElement>({
+    label: '连接已断开，正在重连…',
+  });
+
+  return (
+    <>
+      <span
+        ref={ref}
+        {...handlers}
+        role="status"
+        aria-label="未连接"
+        className="flex shrink-0 items-center justify-center p-1.5"
+      >
+        <span className="block size-2 animate-pulse rounded-full bg-red-500" />
+      </span>
+
+      {tip}
+    </>
+  );
+}
 
 export function TopBar() {
   const docPath = useStore((s) => s.docPath);
@@ -51,13 +78,9 @@ export function TopBar() {
         onClick={toggleReadOnly}
       />
 
-      <span
-        title={connected ? '已连接到本地服务' : '连接已断开，正在重连…'}
-        aria-label={connected ? '已连接' : '未连接'}
-        className={`ml-1 block size-2 shrink-0 rounded-full ${
-          connected ? 'bg-emerald-500' : 'animate-pulse bg-red-500'
-        }`}
-      />
+      {/* A healthy connection is the normal state and needs no badge; only the
+          broken one is worth a dot. */}
+      {!connected && <DisconnectedDot />}
     </header>
   );
 }

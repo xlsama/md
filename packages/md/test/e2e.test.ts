@@ -693,7 +693,7 @@ describe('asset import', () => {
 
   afterAll(async () => {
     await importDaemon.stop();
-    origin.stop(true);
+    await origin.stop(true);
   });
 
   const importAsset = (body: unknown) =>
@@ -725,9 +725,17 @@ describe('asset import', () => {
   });
 
   test('the byte cap aborts an oversized download', async () => {
-    await expect(
-      downloadImage(`${base}/big`, { allowPrivateHosts: true, maxBytes: 64 * 1024 })
-    ).rejects.toThrow(/上限/);
+    // Not `expect().rejects`: bun types its matchers as returning `void`, so
+    // awaiting the assertion is a lint error and dropping the await would let
+    // the test pass without it ever settling.
+    const outcome = await downloadImage(`${base}/big`, {
+      allowPrivateHosts: true,
+      maxBytes: 64 * 1024,
+    }).then(
+      () => 'resolved',
+      (err: unknown) => String(err)
+    );
+    expect(outcome).toMatch(/上限/);
   });
 
   test('the private-host guard still applies on a normal daemon', async () => {

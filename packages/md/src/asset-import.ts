@@ -126,8 +126,8 @@ export async function downloadImage(
     }
     return { bytes, extension };
   } catch (err) {
-    if (err instanceof Error && err.name === 'AbortError') throw new Error('下载超时');
-    if (controller.signal.aborted) throw new Error('下载超时');
+    if (err instanceof Error && err.name === 'AbortError') throw new Error('下载超时', { cause: err });
+    if (controller.signal.aborted) throw new Error('下载超时', { cause: err });
     throw err;
   } finally {
     clearTimeout(timer);

@@ -52,6 +52,18 @@ export async function writeState(next: PersistedState): Promise<void> {
   await fs.writeFile(statePath(), `${JSON.stringify(merged, null, 2)}\n`, 'utf8');
 }
 
+/**
+ * The address to hand a browser, which is not always the one the daemon listens
+ * on: in development vite serves the page and proxies the API back here, so the
+ * page lives on vite's port and this one is an implementation detail. Set
+ * `MD_PUBLIC_URL` there; everywhere else the daemon is the page.
+ */
+export function publicUrl(port: number): string {
+  const override = process.env.MD_PUBLIC_URL?.trim();
+  if (override) return override.replace(/\/+$/, '');
+  return `http://127.0.0.1:${String(port)}`;
+}
+
 export function resolvePort(flagPort?: number): number {
   if (flagPort && Number.isFinite(flagPort)) return flagPort;
   const env = process.env.MD_PORT;

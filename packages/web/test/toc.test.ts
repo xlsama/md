@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { activeHeading, extractToc, sameToc } from '../src/lib/toc.ts';
+import { activeHeading, centerScrollTop, extractToc, sameToc } from '../src/lib/toc.ts';
 
 describe('extractToc', () => {
   test('collects ATX headings with levels and document order', () => {
@@ -89,6 +89,31 @@ describe('activeHeading', () => {
 
   test('a document that does not scroll is not treated as scrolled to its end', () => {
     expect(activeHeading([0, 200], box(0, 500, 500))).toBe(0);
+  });
+});
+
+describe('centerScrollTop', () => {
+  /** A list box of 300px showing 1000px of entries. */
+  const list = { scrollTop: 0, scrollHeight: 1000, clientHeight: 300 };
+  const ENTRY = 24;
+
+  test('puts the entry in the middle of the list', () => {
+    expect(centerScrollTop(list, 500, ENTRY)).toBe(500 + 12 - 150);
+  });
+
+  test('the opening entries stay against the top', () => {
+    expect(centerScrollTop(list, 0, ENTRY)).toBe(0);
+    expect(centerScrollTop(list, 100, ENTRY)).toBe(0);
+  });
+
+  test('the closing entries stay against the bottom', () => {
+    expect(centerScrollTop(list, 976, ENTRY)).toBe(700);
+    expect(centerScrollTop(list, 900, ENTRY)).toBe(700);
+  });
+
+  test('a list that fits its box never moves', () => {
+    const short = { scrollTop: 0, scrollHeight: 200, clientHeight: 300 };
+    expect(centerScrollTop(short, 176, ENTRY)).toBe(0);
   });
 });
 

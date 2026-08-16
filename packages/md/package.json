@@ -33,7 +33,7 @@
     "./protocol": "./src/protocol.ts"
   },
   "scripts": {
-    "dev": "bun run --watch src/cli.ts daemon",
+    "dev": "MD_PORT=${MD_PORT:-2235} MD_PUBLIC_URL=${MD_PUBLIC_URL:-http://localhost:2234} bun run --watch src/cli.ts daemon",
     "start": "bun run src/cli.ts daemon",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
@@ -45,7 +45,8 @@
   "dependencies": {
     "@hono/zod-validator": "^0.9.0",
     "autocorrect-node": "^2.14.0",
-    "hono": "^4.13.1",
+    "hono": "^4.13.2",
+    "open": "^11.0.1",
     "oxfmt": "^0.63.0",
     "trash": "^10.1.1",
     "zod": "^4.4.3"

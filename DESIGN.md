@@ -25,13 +25,14 @@
   - Hono（HTTP 路由）、`Bun.serve` 原生 WebSocket、Zod
   - `oxfmt`（JS API：`format(fileName, text) → Promise<{code, errors}>`，已验证支持 markdown）
   - `autocorrect-node`（NAPI：`formatFor(text, filepath) → string`、`loadConfig(configStr)`）
-  - `trash`（删除进系统废纸篓）
+  - `trash`（删除进系统废纸篓）、`open`（打开浏览器，见「跨平台适配」）
   - 搜索用系统 `rg`（spawn，`--json`），启动时检测缺失则搜索功能报错提示
 - `packages/web`（包名 `@md/web`，private）：
   - Vite + React 19 + TypeScript + Tailwind CSS v4
   - `@meowdown/react` + `@meowdown/core`（编辑器，要求 React 19）
   - `@pierre/trees`（文件树）、`@pierre/diffs`（冲突对比）、`@pierre/theming`
   - `@iconify/react`（图标；用 `/offline` 入口 + `@iconify-icons/lucide` 的单图标数据，构建产物不依赖 Iconify 远程 API）
+  - `yaml`（frontmatter 属性表；用 Document API 做最小改写，注释与引号风格能原样留住，不是 `parse`/`stringify` 一进一出）
   - Zustand（状态）；少量 HTTP 调用直接用 `fetch` + 协议里的 Zod schema 校验响应（**没有引入 Hono RPC**：只有 health / settings / assets / link-meta 四个端点，`hc<AppType>` 的类型收益不足以抵消把整个 Hono 类型图拉进前端构建的代价）
   - TanStack Router（单路由，不引文件式路由生成器）：只承担两件事——`?file=<工作区相对路径>` 把当前打开的文件写进 URL（一律 `replace`，切文件不进历史栈），以及以该参数为 key 的**按文件滚动位置记忆**（编辑器滚动容器接 `data-scroll-restoration-id`）
 - 不用：TanStack Query（WS 推送模型用不上）、CRDT、Service Worker。
@@ -75,6 +76,7 @@ md/
 │           ├── components/    # 文件名 kebab-case，导出的组件名 PascalCase
 │           │   ├── file-tree.tsx        # @pierre/trees + 右键菜单（新建/重命名/删除）
 │           │   ├── editor.tsx           # Meowdown 桥接（详见「编辑器桥接」）
+│           │   ├── frontmatter-table.tsx # 文档顶部的 YAML 属性表（doc 的 frontmatter attr 的唯一 UI）
 │           │   ├── conflict-banner.tsx  # 外部改动冲突条（展开对比用 lazy() 动态载入下一行）
 │           │   ├── conflict-diff.tsx     # @pierre/diffs 并排对比，单独一个 chunk（~131KB gzip，首屏不加载）
 │           │   ├── toc.tsx              # 当前文档标题大纲，点击滚动定位
@@ -88,6 +90,7 @@ md/
 ## 端口、配置与状态
 
 - 默认端口 **2233**，覆盖顺序：`--port` flag > `MD_PORT` 环境变量 > 默认值。只绑 `127.0.0.1`。
+- `MD_PUBLIC_URL`：daemon 报给浏览器的地址（`/api/open` 的返回值）。默认就是自己的监听地址；只有前面挡着别的服务器时才需要设，见「开发与构建」的 dev 端口布局。
 - 状态目录 `~/.local/state/md/`：`state.json`（`{ lastWorkspace, lastFocus }`）、`daemon.log`、`daemon.pid`。
 - 格式化配置：工作区根目录若存在 `.autocorrectrc` 传给 `loadConfig`；oxfmt 的 `format()` 传 `FormatConfig`（若工作区有 `.oxfmtrc.json` 读取合并），否则默认值。
 
@@ -151,7 +154,9 @@ Meowdown 是非受控组件：`<MeowdownEditor initialMarkdown={…} handleRef={
 - **切文件**：flush 未决保存 → 对新文件 `setMarkdown(content)`（同一编辑器实例，不 remount）。
 - **保存**：`onDocChange` → 标脏 → 防抖 `saveDebounceMs`（默认 100ms） → `getMarkdown()` 发 `save`。`Cmd+S` flush 立即保存。
 - **格式化空闲回灌**：收到 `saved` 后若 `saved.content !== 发送的 content`，暂存 pendingFormatted。在「停止输入 2s / Cmd+S / 切文件 / 编辑器失焦」且此后无新编辑时：`getSelection()` → `setMarkdown(saved.content)` → `setSelection`（越界则 clamp 到文档尾）→ 更新 baseHash。有新编辑则丢弃 pending，等下一轮保存。
+- **Cmd+S 重解析**（`refreshMarkdownRendering()`，回灌之后、发保存之前）：有些编辑器状态在 markdown 里没有对应物——最常见的是文末连按回车留下的空段落，序列化时被 `replace(/\s+$/, '')` 吃掉。于是发给 daemon 的文本本来就是格式化好的，回执逐字节相同，回灌没东西可灌，空行就一直留在屏幕上（磁盘上的文件其实一直是干净的）。重解析把编辑器文档拉回与它自己的 markdown 一致，**不在前端另立一套格式化规则**：序列化器丢掉什么，屏幕上就少什么。只有显式保存才做——防抖自动保存里做，等于在人刚敲下回车的下一拍就把那行删掉。它不触发 `onDocChange`、不进 undo 历史，因此既不会标脏也不会丢掉已暂存的 pending。
 - **渲染模式**：编辑器固定 `mode="focus"`（Typora 式「光标处显源码」）。**没有 focus / show / hide 三模式切换**——切换器做过又移除了，三选一里另外两个没人用。**不做 Source 源码模式**。
+- **点击文末空白**（`lib/trailing-paragraph.ts`）：编辑器铺满整列、末尾还留一段 padding，正文下方永远有空白；点在那里应当接着往下写，而不是什么都不发生。mousedown **捕获阶段**拦下并取消（否则 ProseMirror 会把光标丢在最后一块的末尾并从那里起一次拖选），文档末尾不是空段落时补一个**顶层**段落（空白属于文档，不属于最后一行所在的列表或代码块），光标落进去。已经是空段落就只挪光标——重复点击不叠空行。补出来的段落在序列化时被吃掉（同上一条），所以「只点不写」不改变磁盘上的文件。只读、无文件、右键与 Shift+点击都不接管。
 - **只读开关**：TopBar 有一个只读切换（`readOnly` 传给编辑器），状态存 localStorage `md:read-only`。它只挡输入，不改渲染模式。
 - **Wikilinks**：`onWikilinkSearch(query)` → 用 store 里树的 `.md` 基名（去扩展名）模糊过滤；`onWikilinkClick(target)` → 按基名在树中找文件发 `open`，找不到 toast 提示不存在。
 - **图片显示**：`resolveImageUrl(src)`：相对路径改写为 `/raw/<当前文件所在目录>/<src>`；http(s) 绝对地址原样返回。
@@ -159,7 +164,10 @@ Meowdown 是非受控组件：`<MeowdownEditor initialMarkdown={…} handleRef={
 - **块级媒体宽度**：图片 / 视频 / 推文 / 站点卡片共用 `--md-media-width: min(390px, 100%)`，边缘在正文列里对齐。用户手动拖过的尺寸继续尊重，上限是正文列宽（resizable root 自带 `max-width: 100%`，天然被容器夹住）。
 - **粘贴图片**：拦截 paste/drop 中的图片（Meowdown 若有 upload/file 回调 prop 优先走它，没有则在容器上拦 paste 事件）→ `POST /api/assets`（multipart：file + docPath）→ 服务端存 `<doc 所在目录>/assets/<yyyyMMdd-HHmmss>-<原名或 pasted.png>` → 返回相对路径 → 编辑器光标处插入 ``。
 - **粘贴转存远程图片**（`importPastedImages` 开关，默认关）：容器 paste 事件 capture 阶段读剪贴板文本（不动粘贴本身），提取其中的远程图片 URL（markdown `![]()` 与 `<img src>`，单次上限 50、去重）→ 逐个 `POST /api/assets/import`（并发 3）→ daemon 按 link-meta 同款 SSRF 规则下载（仅 http(s)、逐跳查重定向、必须声明 image/* 类型、20MB 上限）存进 assetsDir，文件名 `<时间戳>-<URL哈希前8>.<扩展名>` → 前端把编辑器文档里的该 URL **按字面文本替换**为本地相对路径（正常 transaction：可撤销、光标经 mapping 保持、触发自动保存）。文档已切换/已编辑掉 URL 时替换自然落空。失败静默保留原链接，最后汇总一条 toast。动机：粘贴来的图片链接（飞书/Notion/带签名的 CDN）会过期，本地才留得住。
-- **TOC**：对当前 markdown 提取标题行（跳过 code fence 内），点击 → 编辑器 DOM 里第 n 个对应 heading 元素 `scrollIntoView`。
+- **YAML frontmatter 属性表**（`frontmatter-table.tsx` + `lib/frontmatter.ts`）：编辑器开 `frontmatter` prop，开头的 `---` 块被**剥离**成 `doc` 节点上的一个字符串属性（原样保存、不渲染任何 DOM），序列化时原样写回。不开这个 prop 时 `---` 会被当成分隔线、YAML 当成正文段落。属性表是这个 attr 的唯一入口：它作为 `MeowdownEditor` 的 children 渲染（只有编辑器的 ProseKit context 里才拿得到 editor），DOM 上排在正文之后，靠 `order: -1` 提到正文之上——`.meowdown` 本来就是 flex 列。每次改动 dispatch 一个 `setDocAttribute`：是正常的可撤销 step，也会触发 `onDocChange`，所以自动保存链路和改正文完全一样。没有 frontmatter 的文档不显示表格，`/属性` 斜杠菜单项负责开一个空块（在编辑器里手打 `---` 不行：剥离只发生在解析 markdown 的时候，编辑器里敲出来的分隔线就是分隔线）。
+- **属性表的 YAML 往返**：每次编辑都重新 `parseDocument` → 改动一个节点 → 打印回去，因此没被碰过的行保持逐字节不变（注释、引号风格、键顺序都在）。`lineWidth: 0` 关掉 80 列折行，否则会重排没人改过的长值。输入框里的文本按 YAML 自己的规则读：`42` 是数字、`true` 是布尔、`[a, b]` 是列表；会解析成映射（或根本解析不了）的文本一律当字面字符串存，免得一个冒号把块改结构。清空的值写成裸 `key:`。嵌套映射这类两列表格无法诚实编辑的值只读展示源码；整块不是键值映射时表格整体退化为只读。
+- **加载时补回 frontmatter**（`session.writeDoc`）：meowdown 0.65.4 的 `setState` 会剥离 `---` 块，却只 `replaceWith` 文档**内容**——解析出的 frontmatter 从未写进 `doc` 节点，下一次保存就会把文件头写没。所以 `writeDoc` 先 `setDocAttribute` 再 `setState`：内容被替换，属性留在原地。这一步是静音的（`session.muted`），否则打开文档立刻就成了脏文档。所有往编辑器里灌内容的路径（打开、冲突取磁盘版、外部改动、格式化回灌、关闭文档）都走它。
+- **TOC**：对当前 markdown 提取标题行（跳过 code fence 内、跳过 frontmatter），点击 → 编辑器 DOM 里第 n 个对应 heading 元素 `scrollIntoView`。
 - **暗色模式**：由「设置系统」的 `theme` 决定。三方样式（meowdown、@pierre/trees、@pierre/diffs）的颜色都是 `light-dark()` 对，因此强制主题只需在 `html` 上钉住 `color-scheme`；`system` 时移除该属性，回到 `prefers-color-scheme`。
 
 ## HTTP API（Hono 路由；前端直接 `fetch`，响应用 protocol 里的 Zod schema 校验）
@@ -192,7 +200,10 @@ launchd plist：Label `dev.md.daemon`，`ProgramArguments` 用绝对路径（`pr
 
 ## 开发与构建
 
-- root scripts：`dev`（并行：daemon + vite dev，vite 代理 `/api` `/ws` `/raw` 到 2233）、`build`（build web）、`start`（`md daemon`）。
+- root scripts：`dev`（并行：daemon + vite dev，vite 代理 `/api` `/ws` `/raw` 到 daemon）、`build`（build web）、`start`（`md daemon`）。
+- **一个环境一个地址：装好的应用是 `2233`，开发是 `2234`。** 两边都是「页面就在这个端口上」——生产是 daemon 自己 serve 打包产物，开发是 vite——形状一样，只有号码要记。装了服务的机器上 2233 被常驻 daemon 占着，dev 直接复用会起不来，所以换号而不是共用。
+  - dev 的 daemon 躲在 **2235**，没人需要输入它：页面只经 vite 的代理（`/api` `/ws` `/raw`）跟它说话。`MD_PORT` 挪它，dev 脚本与 vite 代理读同一个变量、同一个默认值。vite 侧 `strictPort`，否则端口被占时它会顺延到 2235，正好撞上 daemon。
+  - `MD_PUBLIC_URL` 覆盖 daemon **对外报的地址**（只影响 `/api/open` 返回给 CLI 的 URL 和前台启动日志的 `pages:` 那行，不改监听地址）。dev 脚本把它设成 `http://localhost:2234`，`md <path>` 在开发时才会把你送到 vite 那一页，而不是 daemon 自己端口上那份上次 `pnpm build` 的旧产物。
 - 全局命令安装：README 写明 `cd packages/md && bun link`（或 pnpm link --global）。
 
 ## 安全
@@ -204,7 +215,7 @@ launchd plist：Label `dev.md.daemon`，`ProgramArguments` 用绝对路径（`pr
 1. `md ~/notes` 打开浏览器显示文件树，点击文件可编辑，改动 ≤1s 落盘且磁盘内容已被 autocorrect+oxfmt 格式化
 2. 外部 `echo >> file.md` 修改：浏览器不脏时 ≤1s 内容自动刷新；正在编辑（脏）时出现冲突条，展开可见 diff，两个选项都工作
 3. 打字过程中光标不跳、输入不被格式化打断；停止输入 2s 后编辑器内容变为格式化版且光标位置合理
-4. `md another.md` 在已连接页面上直接切换工作区 + 聚焦，不重复开 tab；无页面连接时自动开浏览器
+4. `md another.md` 在已连接页面上直接切换工作区 + 聚焦，不重复开 tab，且浏览器窗口被提到最前（macOS）；无页面连接时自动开浏览器
 5. 树上新建/重命名/删除工作，删除的文件出现在废纸篓
 6. 粘贴截图 → `assets/` 目录出现文件，编辑器内图片立即显示，markdown 里是相对路径
 7. 全文搜索出结果，点击跳到对应文件
@@ -228,7 +239,7 @@ Bun 覆盖 macOS / Linux / Windows，daemon 与编辑逻辑本身无平台假设
 
 - **开机自启**（`service.ts`）：macOS launchd plist + `launchctl bootstrap`；Linux systemd user unit（`~/.config/systemd/user/md.service`）+ `systemctl --user enable --now`；Windows 计划任务 `schtasks /SC ONLOGON`。不引第三方库（`auto-launch` 一类面向 GUI 应用且久未维护）。`md service plist` 更名为 `md service config`，保留 `plist` 别名。
 - **状态与配置目录**：状态目录 Windows 用 `%LOCALAPPDATA%\md`，其余 `~/.local/state/md`；配置目录优先 `XDG_CONFIG_HOME`，Windows 回落 `%APPDATA%`，其余 `~/.config`。
-- **打开浏览器**：darwin `open`、win32 `cmd /c start ""`（空标题参数不能省，否则 cmd 会把带引号的 URL 当窗口标题）、其余 `xdg-open`。
+- **打开浏览器**：交给 `open` 包（vite 开 dev server 用的同一个），三个平台的分支连同 WSL、Windows 的 `start ""` 引号坑都在包里，自己不再维护。**已经开着的页面不走它**：`md <path>` 命中已连接的 tab 时，daemon 已经广播过 focus，页面本身是对的，只是窗口不在前面——macOS 上用 JXA（`osascript -l JavaScript`）找到停在本机 origin（`127.0.0.1` 与 `localhost` 两种写法都认）的那个 tab，把它所在窗口提到最前并激活浏览器，**不 reload 也不导航**；找不到、或不是 Chromium 系浏览器、或不在 macOS，退回去开 URL。思路抄 vite（vite 又抄自 create-react-app），但它那个脚本会 reload 且按整条 URL 匹配，我们按 origin 匹配、不 reload。
 
 Linux / Windows 的运行时行为未在开发机上验证，只保证类型检查与单元测试通过。
 

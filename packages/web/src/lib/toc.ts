@@ -105,6 +105,20 @@ export function activeHeading(tops: readonly number[], box: ScrollBox): number {
   return active;
 }
 
+/**
+ * Where the outline has to be scrolled for the entry at `top` to sit in the
+ * middle of it.
+ *
+ * Clamped to the list's own range, which is what leaves the opening and closing
+ * entries alone: neither has anything to scroll past, so they settle against an
+ * end instead of being dragged to the centre. A list shorter than its box never
+ * moves at all, for the same reason.
+ */
+export function centerScrollTop(box: ScrollBox, top: number, height: number): number {
+  const max = Math.max(0, box.scrollHeight - box.clientHeight);
+  return Math.min(Math.max(top + height / 2 - box.clientHeight / 2, 0), max);
+}
+
 /** Cheap equality check so the store can skip no-op TOC updates. */
 export function sameToc(a: readonly TocEntry[], b: readonly TocEntry[]): boolean {
   if (a.length !== b.length) return false;

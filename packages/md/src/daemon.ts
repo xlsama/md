@@ -31,7 +31,7 @@ import {
 import { formatMarkdown } from './format.ts';
 import { hasRipgrep, search } from './search.ts';
 import { resolveTarget, Workspace } from './workspace.ts';
-import { clearPid, resolvePort, writePid } from './state.ts';
+import { clearPid, publicUrl, resolvePort, writePid } from './state.ts';
 
 export interface DaemonOptions {
   port?: number;
@@ -438,7 +438,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<DaemonHa
         } catch {}
       }
     },
-    url: () => `http://127.0.0.1:${server?.port ?? 0}`,
+    url: () => publicUrl(server?.port ?? 0),
   };
 
   const app = createRoutes(ctx);
@@ -526,6 +526,10 @@ export async function runDaemonForeground(options: DaemonOptions = {}): Promise<
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
   console.log(`md daemon listening on ${handle.url} (pid ${process.pid})`);
+  // With vite in front, the port above is not the one to open — say which is,
+  // or the line that just printed invites you to the wrong page.
+  const front = publicUrl(handle.port);
+  if (front !== handle.url) console.log(`pages: ${front}`);
   if (handle.workspace.root) console.log(`workspace: ${handle.workspace.root}`);
   if (!hasRipgrep()) console.warn('warning: rg not found in PATH — full-text search disabled');
   return handle;

@@ -1,6 +1,7 @@
 import type { ClientMessage, ServerMessage, TreeNode } from '@xlsama/md/protocol';
-import type { EditorHandle } from '@meowdown/react';
+import type { EditorHandle, SelectionHint } from '@meowdown/react';
 import { importAsset } from './api.ts';
+import { frontmatterOf, writeAttr } from './lib/frontmatter.ts';
 import { extractRemoteImageUrls } from './lib/paste-images.ts';
 import { replaceTextInEditor } from './lib/replace-text.ts';
 import { extractToc, sameToc } from './lib/toc.ts';
@@ -83,6 +84,8 @@ class Session {
   private pendingOpen: string | null = null;
   /** Content that arrived before the editor mounted. */
   private queuedLoad: { path: string; content: string; hash: string } | null = null;
+  /** Set while `writeDoc` restores the frontmatter attribute — not a user edit. */
+  private muted = false;
 
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -114,9 +117,37 @@ class Session {
     return this.path;
   }
 
+  /**
+   * Puts markdown into the editor — frontmatter included.
+   *
+   * `setState` peels the leading `---` block off the text but then replaces only
+   * the document's *content*, so the block it parsed never reaches the `doc`
+   * node it belongs to (meowdown 0.65.4) and the next save would write the file
+   * back without it. Setting the attribute first is what survives the
+   * replacement: content is what gets swapped, attributes are not.
+   *
+   * Muted because a load is not an edit — unmuted, opening a document would
+   * mark it dirty and schedule a save of what was just read.
+   */
+  private writeDoc(content: string, selection?: SelectionHint): void {
+    const handle = this.handle;
+    if (handle === null) return;
+    const { editor } = handle;
+    if (editor !== undefined) {
+      this.muted = true;
+      try {
+        writeAttr(editor, frontmatterOf(content), true);
+      } finally {
+        this.muted = false;
+      }
+    }
+    handle.setState(content, selection);
+  }
+
   // --------------------------------------------------------------- editor →
 
   onDocChange(): void {
+    if (this.muted) return;
     this.dirty = true;
     this.lastEditAt = Date.now();
     this.pending = null;
@@ -175,10 +206,29 @@ class Session {
     }
   }
 
-  /** `Cmd+S`: save immediately, and flow formatted text back if one is staged. */
+  /**
+   * `Cmd+S`: flow formatted text back if one is staged, reparse, save.
+   *
+   * The reparse is what makes an explicit save also tidy the document up.
+   * Some editor states have no markdown to show for themselves — the blank
+   * paragraphs Return leaves at the end of a document are the everyday one, as
+   * the serializer trims trailing whitespace. The daemon therefore receives
+   * text that is already formatted, echoes it back unchanged, and the reflow
+   * below has nothing to flow: the blank lines stay on screen over a file that
+   * has been clean on disk all along. Reparsing the editor's own markdown puts
+   * the document back in step with it, and does it without inventing a second
+   * formatting rule here — whatever the serializer drops, disappears.
+   *
+   * Only an explicit save reparses. Under the debounced autosave this would
+   * delete the line someone just opened with Return, a keystroke before they
+   * type into it: asking for a save is asking for a tidy document, typing is
+   * not. It also stays out of the undo history and never fires `onDocChange`,
+   * so it cannot dirty the document or drop a staged reflow.
+   */
   saveNow(): void {
-    this.flushSave();
     this.maybeReflow('shortcut');
+    if (useStore.getState().conflict === null) this.handle?.refreshMarkdownRendering();
+    this.flushSave();
   }
 
   // ----------------------------------------------------------------- files →
@@ -227,7 +277,7 @@ class Session {
     const state = useStore.getState();
     const { conflict } = state;
     if (conflict === null || this.handle === null) return;
-    this.handle.setState(conflict.diskContent);
+    this.writeDoc(conflict.diskContent);
     this.baseHash = conflict.diskHash;
     this.dirty = false;
     this.saveFailed = false;
@@ -409,7 +459,7 @@ class Session {
     this.clearTimer('idleTimer');
     this.clearTimer('saveTimer');
     this.syncDirty();
-    this.handle.setState(file.content, 'start');
+    this.writeDoc(file.content, 'start');
     this.releaseEditorFocus();
     useStore.getState().setConflict(null);
     this.setPath(file.path, false);
@@ -463,7 +513,7 @@ class Session {
         this.baseHash = msg.hash;
         return;
       case 'refresh':
-        this.handle.setState(msg.content);
+        this.writeDoc(msg.content);
         this.baseHash = msg.hash;
         this.pending = null;
         this.clearTimer('idleTimer');
@@ -497,7 +547,7 @@ class Session {
   private closeDoc(): void {
     this.resetDoc(null);
     useStore.getState().setToc([]);
-    this.handle?.setState('', 'start');
+    this.writeDoc('', 'start');
     this.releaseEditorFocus();
   }
 
@@ -636,7 +686,7 @@ class Session {
     // formatting shifts every position after its first change, so an explicit
     // selection lands the caret somewhere else and `scrollIntoView` yanks the
     // page there with it.
-    this.handle.setState(pending.content);
+    this.writeDoc(pending.content);
     this.baseHash = pending.hash;
     this.pending = null;
     this.clearTimer('idleTimer');

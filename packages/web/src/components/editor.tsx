@@ -1,4 +1,10 @@
-import { MeowdownEditor, useExtension, type EditorHandle, type WikilinkItem } from '@meowdown/react';
+import {
+  MeowdownEditor,
+  useExtension,
+  type EditorHandle,
+  type SlashMenuItem,
+  type WikilinkItem,
+} from '@meowdown/react';
 import { useElementScrollRestoration, useSearch } from '@tanstack/react-router';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { uploadAsset } from '../api.ts';
@@ -7,9 +13,11 @@ import { defineLinkBlocks } from '../link-blocks.tsx';
 import { dirname, isMarkdown, join, resolveImageUrl, stripExtension } from '../lib/paths.ts';
 import { locationScrollKey } from '../lib/route.ts';
 import { EDITOR_SCROLL_ID, restoreScrollTop } from '../lib/scroll.ts';
+import { focusTrailingParagraph, isBelowLastBlock } from '../lib/trailing-paragraph.ts';
 import { resolveWikilink, searchNotes } from '../lib/tree.ts';
 import { session } from '../session.ts';
 import { useStore } from '../store.ts';
+import { FrontmatterTable } from './frontmatter-table.tsx';
 
 const PLACEHOLDER = '开始写点什么…';
 
@@ -128,6 +136,30 @@ export function Editor() {
     useStore.getState().pushToast(error instanceof Error ? error.message : '图片上传失败', 'error');
   }, []);
 
+  /**
+   * A document without frontmatter shows no property table, so this is where a
+   * block is started. Typing `---` cannot do it: the peel happens when markdown
+   * is parsed, and a rule typed into the editor is a rule.
+   */
+  const handleSlashMenuSearch = useCallback((): SlashMenuItem[] => {
+    const editor = handleRef.current?.editor;
+    if (editor === undefined || editor.state.doc.attrs.frontmatter !== null) return [];
+    return [
+      {
+        id: 'frontmatter',
+        label: '属性',
+        keywords: ['frontmatter', 'yaml', 'properties', 'metadata'],
+        detail: 'YAML frontmatter',
+        onSelect: () => {
+          editor.exec((state, dispatch) => {
+            dispatch?.(state.tr.setDocAttribute('frontmatter', ''));
+            return true;
+          });
+        },
+      },
+    ];
+  }, []);
+
   return (
     <div
       ref={hostRef}
@@ -135,6 +167,19 @@ export function Editor() {
       className="md-editor-host min-h-0 flex-1 overflow-y-auto"
       onBlur={() => {
         session.onBlur();
+      }}
+      // Clicking the empty space under the text continues the document there,
+      // the way pressing Enter on the last line would. Capture phase with the
+      // event cancelled: ProseMirror's own mousedown would otherwise drop the
+      // caret at the end of the last block and start a selection drag from it.
+      onMouseDownCapture={(event) => {
+        const editor = handleRef.current?.editor;
+        if (editor === undefined || docPath === null || readOnly) return;
+        if (event.button !== 0 || event.shiftKey) return;
+        if (!isBelowLastBlock(editor.view.dom.lastElementChild, event.clientY)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        focusTrailingParagraph(editor);
       }}
       // Capture phase: the clipboard is read before ProseMirror consumes the
       // event. The paste itself proceeds untouched — this only notes which
@@ -155,7 +200,12 @@ export function Editor() {
         readOnly={docPath === null || readOnly}
         placeholder={PLACEHOLDER}
         spellCheck={false}
+        // Peels a leading `---` block onto the doc's `frontmatter` attribute
+        // instead of parsing it as a rule and a paragraph of prose, and writes
+        // it back on save. `FrontmatterTable` is the UI for that attribute.
+        frontmatter
         onDocChange={handleDocChange}
+        onSlashMenuSearch={handleSlashMenuSearch}
         onWikilinkSearch={handleWikilinkSearch}
         onWikilinkClick={handleWikilinkClick}
         onLinkClick={handleLinkClick}
@@ -164,6 +214,7 @@ export function Editor() {
         resolveImageUrl={resolveImage}
       >
         <LinkBlocks />
+        <FrontmatterTable />
       </MeowdownEditor>
     </div>
   );

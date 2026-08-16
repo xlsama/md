@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import fs from 'node:fs';
 import path from 'node:path';
+import open from 'open';
 import pkg from '../package.json';
 import {
   DEFAULT_SETTINGS,
@@ -126,18 +127,86 @@ async function restartDaemon(port: number, pid: number): Promise<HealthResponse 
 }
 
 async function openBrowser(url: string): Promise<void> {
-  // The empty string after `start` is the window title: without it cmd.exe treats
-  // a quoted URL as the title and opens nothing.
-  const cmd =
-    process.platform === 'darwin'
-      ? ['open', url]
-      : process.platform === 'win32'
-        ? ['cmd', '/c', 'start', '', url]
-        : ['xdg-open', url];
+  // `open` carries the per-platform knowledge this used to spell out by hand —
+  // WSL and the `start ""` quoting rule on Windows included. It is the package
+  // vite opens its dev server with.
   try {
-    const proc = Bun.spawn({ cmd, stdout: 'ignore', stderr: 'ignore' });
-    proc.unref();
+    await open(url);
   } catch {}
+}
+
+/**
+ * Browsers that answer to Chrome's scripting interface, which is what
+ * `raiseTab` talks to. The list is vite's, which took it from create-react-app.
+ */
+const CHROMIUM_BROWSERS = [
+  'Google Chrome Canary',
+  'Google Chrome Dev',
+  'Google Chrome Beta',
+  'Google Chrome',
+  'Microsoft Edge',
+  'Brave Browser',
+  'Vivaldi',
+  'Chromium',
+];
+
+/**
+ * Finds the tab already on one of `origins` and puts its window in front.
+ *
+ * Neither reloading nor navigating: by the time this runs the daemon has told
+ * that page which file to show, so the page is already right and only its
+ * window is in the wrong place. Opening the URL again instead would leave a
+ * second tab on the same document, which is the thing `md <path>` on an
+ * open workspace must not do.
+ */
+const RAISE_TAB = `function run(argv) {
+  const app = Application(argv[0]);
+  const origins = argv.slice(1);
+  for (const win of app.windows()) {
+    const tabs = win.tabs();
+    for (let i = 0; i < tabs.length; i++) {
+      if (!origins.some((origin) => tabs[i].url().startsWith(origin))) continue;
+      win.activeTabIndex = i + 1;
+      win.index = 1;
+      app.activate();
+      return 'ok';
+    }
+  }
+  return '';
+}`;
+
+/**
+ * Which scriptable browser is running, if any. Asking a browser that is not
+ * running for its windows would launch it, so the process list is checked
+ * first — `ps cax` prints executable names, one per line.
+ */
+async function runningBrowser(): Promise<string | null> {
+  try {
+    const proc = Bun.spawn(['ps', 'cax'], { stdout: 'pipe', stderr: 'ignore' });
+    const listing = await new Response(proc.stdout).text();
+    return CHROMIUM_BROWSERS.find((name) => listing.includes(name)) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether an already-open page was brought to the front. */
+async function raiseTab(origins: string[]): Promise<boolean> {
+  // Elsewhere there is no equivalent to ask: the fallback is to open the URL,
+  // which at least surfaces the browser.
+  if (process.platform !== 'darwin') return false;
+  const browser = await runningBrowser();
+  if (browser === null) return false;
+  try {
+    const proc = Bun.spawn(['osascript', '-l', 'JavaScript', '-e', RAISE_TAB, browser, ...origins], {
+      stdout: 'pipe',
+      stderr: 'ignore',
+    });
+    const out = await new Response(proc.stdout).text();
+    return out.trim() === 'ok';
+  } catch {
+    return false;
+  }
 }
 
 async function commandOpen(target: string | undefined, port: number): Promise<void> {
@@ -175,12 +244,26 @@ async function commandOpen(target: string | undefined, port: number): Promise<vo
     fail(`open failed: ${message}`);
   }
   const data = openResponseSchema.parse(await res.json());
-  if (data.clients === 0 && process.env['MD_NO_OPEN'] !== '1') {
-    await openBrowser(data.url);
-    console.log(`md: opened ${data.url}`);
-  } else {
-    console.log(`md: focused ${data.focus ?? data.root} in ${data.clients} connected tab(s)`);
+  if (process.env['MD_NO_OPEN'] === '1') {
+    console.log(`md: ${data.url}`);
+    return;
   }
+
+  // The address the daemon hands out, which is not always the port this command
+  // dialled — in development vite serves the page and proxies back here. The
+  // loopback name is doubled up because a tab already open may be on the other
+  // spelling of the same host.
+  const page = new URL(data.url);
+  const origins = [page.origin];
+  if (page.hostname === '127.0.0.1') origins.push(`http://localhost:${page.port}`);
+  if (page.hostname === 'localhost') origins.push(`http://127.0.0.1:${page.port}`);
+  if (data.clients > 0 && (await raiseTab(origins))) {
+    console.log(`md: focused ${data.focus ?? data.root} in ${data.clients} connected tab(s)`);
+    return;
+  }
+
+  await openBrowser(data.url);
+  console.log(`md: opened ${data.url}`);
 }
 
 async function commandConfig(): Promise<void> {

@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
-import { activeHeading, type TocEntry } from '../lib/toc.ts';
-import { JUMP_GUTTER, jumpScrollTop, reducedMotion } from '../lib/scroll.ts';
+import { activeHeading, centerScrollTop, type TocEntry } from '../lib/toc.ts';
+import { JUMP_GUTTER, jumpScrollTop } from '../lib/scroll.ts';
 import { TOC_WIDE_QUERY, tocView } from '../lib/toc-panel.ts';
 import { useStore } from '../store.ts';
 import { IconButton } from './icon-button.tsx';
@@ -79,6 +79,40 @@ function useActiveHeading(key: string): number {
   return active;
 }
 
+/** The entry the outline marks, as a selector — the list finds it in the DOM. */
+const MARKED = '[aria-current="location"]';
+
+/**
+ * Keeps the marked entry in the middle of the list, so a long outline scrolls
+ * along with the reading instead of standing still until the mark walks off its
+ * edge. Centred, the entries on either side are always in view: what was just
+ * read stays above, what comes next is already below.
+ *
+ * The first placement for a document is instant. Opening the panel on a
+ * document that is already scrolled halfway should find the outline halfway
+ * too, rather than watching it travel there; every move after that is animated,
+ * because then the motion is the point — it is what says the outline followed.
+ */
+function useCenteredEntry(key: string, active: number): RefObject<HTMLDivElement | null> {
+  const ref = useRef<HTMLDivElement>(null);
+  const placed = useRef<string | null>(null);
+
+  useEffect(() => {
+    const list = ref.current;
+    if (list === null) return;
+    const entry = list.querySelector<HTMLElement>(MARKED);
+    if (entry === null) return;
+
+    const offset = entry.getBoundingClientRect().top - list.getBoundingClientRect().top;
+    const target = centerScrollTop(list, list.scrollTop + offset, entry.offsetHeight);
+    if (placed.current === key) jumpScrollTop(list, target);
+    else list.scrollTop = target;
+    placed.current = key;
+  }, [key, active]);
+
+  return ref;
+}
+
 interface TipAnchor {
   text: string;
   top: number;
@@ -115,17 +149,6 @@ function TocItem({
   onNavigate: () => void;
 }) {
   const ref = useRef<HTMLButtonElement>(null);
-
-  // A long outline scrolls too, and the marked entry is no use off-screen.
-  // `nearest` leaves it alone whenever it is already in view, so the list only
-  // moves when the reading has actually walked past its edge.
-  useEffect(() => {
-    if (!active) return;
-    ref.current?.scrollIntoView({
-      block: 'nearest',
-      behavior: reducedMotion() ? 'auto' : 'smooth',
-    });
-  }, [active]);
 
   const show = (): boolean => {
     const node = ref.current;
@@ -170,11 +193,19 @@ function TocItem({
   );
 }
 
-/** The outline list itself, shared by the docked panel and the popover. */
-function TocList({ onNavigate }: { onNavigate: () => void }) {
+/**
+ * The outline list itself, shared by the docked panel and the popover.
+ *
+ * It owns the scroll container, because the two are one thing: the box the
+ * entries scroll inside is also the box the marked entry is centred in.
+ * `className` is where each presentation says how tall that box may get.
+ */
+function TocList({ className, onNavigate }: { className: string; onNavigate: () => void }) {
   const toc = useStore((s) => s.toc);
   const docPath = useStore((s) => s.docPath);
-  const active = useActiveHeading(`${docPath ?? ''}:${String(toc.length)}`);
+  const key = `${docPath ?? ''}:${String(toc.length)}`;
+  const active = useActiveHeading(key);
+  const list = useCenteredEntry(key, active);
   const [anchor, setAnchor] = useState<TipAnchor | null>(null);
   const onShow = useCallback((next: TipAnchor | null) => {
     setAnchor(next);
@@ -182,21 +213,23 @@ function TocList({ onNavigate }: { onNavigate: () => void }) {
 
   return (
     <>
-      {toc.length === 0 && (
-        <p className="px-2 py-1 text-xs text-[var(--md-muted)]">这篇文档还没有标题</p>
-      )}
-      <ul className="flex flex-col gap-0.5">
-        {toc.map((entry) => (
-          <li key={`${String(entry.index)}:${entry.text}`} className="min-w-0">
-            <TocItem
-              entry={entry}
-              active={entry.index === active}
-              onShow={onShow}
-              onNavigate={onNavigate}
-            />
-          </li>
-        ))}
-      </ul>
+      <div ref={list} className={`overflow-x-hidden overflow-y-auto ${className}`}>
+        {toc.length === 0 && (
+          <p className="px-2 py-1 text-xs text-[var(--md-muted)]">这篇文档还没有标题</p>
+        )}
+        <ul className="flex flex-col gap-0.5">
+          {toc.map((entry) => (
+            <li key={`${String(entry.index)}:${entry.text}`} className="min-w-0">
+              <TocItem
+                entry={entry}
+                active={entry.index === active}
+                onShow={onShow}
+                onNavigate={onNavigate}
+              />
+            </li>
+          ))}
+        </ul>
+      </div>
       {anchor !== null && <Tooltip anchor={anchor} />}
     </>
   );
@@ -267,9 +300,10 @@ function TocHover() {
       />
       {hovered && (
         <nav aria-label="大纲" className="absolute end-0 top-full w-60 pt-2">
-          <div className="md-fade-in md-glass max-h-[70vh] overflow-x-hidden overflow-y-auto rounded-xl border p-2">
-            <TocList onNavigate={close} />
-          </div>
+          <TocList
+            className="md-fade-in md-glass max-h-[50vh] rounded-xl border p-2"
+            onNavigate={close}
+          />
         </nav>
       )}
     </div>
@@ -307,11 +341,17 @@ export function Toc() {
     // inside the scrollbar, so the editor's scroll container can run to the
     // very edge of the window. The space it covers is reserved by the shell's
     // `--md-toc-reserve`, which is why it never lands on top of the text.
+    //
+    // It is only as tall as it needs to be, and never taller than half the
+    // window: a panel running the full height reads as a second column of text,
+    // and the strip it leaves free below itself is strip the wheel spends on
+    // the document instead. `100%` is the floor under that half, for a
+    // container an open conflict banner has squeezed.
     <nav
       aria-label="大纲"
-      className="absolute end-[calc(var(--md-scrollbar)+1rem)] top-0 bottom-0 z-20 w-60 overflow-x-hidden overflow-y-auto px-2 pb-3"
+      className="absolute end-[calc(var(--md-scrollbar)+1rem)] top-0 z-20 flex max-h-[min(50vh,100%)] w-60 flex-col pb-3"
     >
-      <div className="sticky top-0 z-10 flex justify-end bg-[var(--md-bg)] pt-2 pb-1">
+      <div className="flex shrink-0 justify-end px-2 pt-2 pb-1">
         <IconButton
           icon="chevrons-right"
           label="收起大纲"
@@ -320,7 +360,7 @@ export function Toc() {
           }}
         />
       </div>
-      <TocList onNavigate={noop} />
+      <TocList className="min-h-0 px-2 pb-1" onNavigate={noop} />
     </nav>
   );
 }
