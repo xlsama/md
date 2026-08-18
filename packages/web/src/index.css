@@ -696,6 +696,122 @@ a.md-link-card:hover {
   }
 }
 
+/* ------------------------------------------------------------- Details blocks
+   `<details>` is raw HTML, which meowdown has no node for and parses into plain
+   paragraphs — one holding the opening tag with its `<summary>`, one holding
+   `</details>`. Both are collapsed to nothing exactly the way a link block's
+   source line is, a header widget is drawn where the opener was, and the blocks
+   between them carry `.md-details-body`. */
+.md-editor-host .ProseMirror p.md-details-tag {
+  height: 0;
+  margin: 0;
+  overflow: hidden;
+  opacity: 0;
+  font-size: 0;
+  line-height: 0;
+  letter-spacing: 0;
+}
+
+/* Put the caret in a tag and its source comes back, so it stays editable. Tied
+   to editor focus as well, for the reason link blocks are: a freshly opened
+   document parks its selection at the very start. */
+.md-editor-host .ProseMirror:focus-within p.md-details-tag[data-md-details-caret] {
+  height: auto;
+  margin: revert;
+  opacity: 1;
+  font-size: 0.9375rem;
+  line-height: 1.7;
+  letter-spacing: normal;
+}
+
+/* Editing the opening tag means reading it, not the header drawn over it. */
+.md-editor-host
+  .ProseMirror:focus-within
+  .md-details-header:has(+ p.md-details-tag[data-md-details-caret]) {
+  display: none;
+}
+
+.md-editor-host .ProseMirror .md-details-header {
+  margin: 0.85em 0;
+  margin-inline-start: var(--md-details-indent, 0);
+}
+
+.md-details-toggle {
+  display: flex;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--md-measure);
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--md-border);
+  border-radius: 0.5rem;
+  background: var(--md-panel);
+  color: inherit;
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  text-align: start;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.md-details-toggle:hover {
+  background: var(--md-hover);
+  border-color: color-mix(in oklab, var(--md-accent) 45%, var(--md-border));
+}
+
+/* Lucide's `chevron-down`, pointing down when the block is open and swung a
+   quarter turn to the right when it is shut — rotating it is the whole of the
+   open/closed animation. */
+.md-details-marker {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  color: var(--md-muted);
+  transform: rotate(-90deg);
+  transition:
+    transform 0.18s ease,
+    color 0.15s ease;
+}
+
+.md-details-header[data-expanded='true'] .md-details-marker {
+  transform: rotate(0deg);
+}
+
+.md-details-toggle:hover .md-details-marker {
+  color: var(--md-fg);
+}
+
+.md-details-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The markdown named no `<summary>`, so the label is ours and reads as a hint
+   rather than as the author's words. */
+.md-details-summary[data-fallback] {
+  color: var(--md-muted);
+}
+
+.md-editor-host .ProseMirror .md-details-body {
+  margin-inline-start: var(--md-details-indent, 0);
+}
+
+.md-editor-host .ProseMirror .md-details-hidden {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .md-details-marker {
+    transition: none;
+  }
+}
+
 /* Pierre trees renders into a shadow root; align it with our palette. The
    background override is what makes the sidebar one continuous surface: the
    tree ships its own (darker) sidebar colour, which turned the header row above

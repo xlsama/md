@@ -54,17 +54,17 @@ importers:
         specifier: ^2.1.9
         version: 2.1.9(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@iconify-icons/lucide':
-        specifier: ^1.2.135
-        version: 1.2.135
+        specifier: ^1.2.136
+        version: 1.2.136
       '@iconify/react':
         specifier: ^6.0.2
         version: 6.0.2(react@19.2.8)
       '@meowdown/core':
-        specifier: ^0.65.5
-        version: 0.65.5(@lezer/common@1.5.2)(@shikijs/types@4.4.3)(@types/hast@3.0.5)(prosemirror-model@1.25.11)(prosemirror-state@1.4.4)(prosemirror-transform@1.12.0)(prosemirror-view@1.42.2)
+        specifier: ^0.65.6
+        version: 0.65.6(@lezer/common@1.5.2)(@shikijs/types@4.4.3)(@types/hast@3.0.5)(prosemirror-model@1.25.11)(prosemirror-state@1.4.4)(prosemirror-transform@1.12.0)(prosemirror-view@1.42.2)
       '@meowdown/react':
-        specifier: ^0.65.5
-        version: 0.65.5(@lezer/common@1.5.2)(@lezer/highlight@1.2.3)(@shikijs/types@4.4.3)(@types/hast@3.0.5)(@types/react@19.2.18)(prosemirror-model@1.25.11)(prosemirror-state@1.4.4)(prosemirror-transform@1.12.0)(prosemirror-view@1.42.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: ^0.65.6
+        version: 0.65.6(@lezer/common@1.5.2)(@lezer/highlight@1.2.3)(@shikijs/types@4.4.3)(@types/hast@3.0.5)(@types/react@19.2.18)(prosemirror-model@1.25.11)(prosemirror-state@1.4.4)(prosemirror-transform@1.12.0)(prosemirror-view@1.42.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@pierre/diffs':
         specifier: ^1.3.5
         version: 1.3.5(@shikijs/themes@4.4.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -289,8 +289,8 @@ packages:
       hono: '>=4.11.2'
       zod: ^3.25.0 || ^4.0.0
 
-  '@iconify-icons/lucide@1.2.135':
-    resolution: {integrity: sha512-t2Dya1a+PInBmHScbbGyseze7rrGHRW/dYF4GTR6f51N08sCg6KrtE4zmplnZE1ul2NyC+sxKpXRCv48hEgaQw==}
+  '@iconify-icons/lucide@1.2.136':
+    resolution: {integrity: sha512-g4ZLG+MioyIGnt7x+4AIxY4Dh+vEvRx+wrdi92gd5MzM/zpXWLi727/fiYnU+Qqqq05LFWq7IlCc0OSKXBBv2w==}
 
   '@iconify/react@6.0.2':
     resolution: {integrity: sha512-SMmC2sactfpJD427WJEDN6PMyznTFMhByK9yLW0gOTtnjzzbsi/Ke/XqsumsavFPwNiXs8jSiYeZTmLCLwO+Fg==}
@@ -373,14 +373,14 @@ packages:
   '@marijn/find-cluster-break@1.0.3':
     resolution: {integrity: sha512-FY+MKLBoTsLNJF/eLWaOsXGdz6uh3Iu1axjPf6TUq92IYumcTcXWHoS747JARLkcdlJ/Waiaxc5wQfFO8jC6NA==}
 
-  '@meowdown/core@0.65.5':
-    resolution: {integrity: sha512-mxt72Zbs2DyCFGjkWGuWCbRjrhirvODhUmnzaM4K1EvmjHM6oaPO1zF5watS+xLeba+FkiyBmH/03bUmmWujyg==}
+  '@meowdown/core@0.65.6':
+    resolution: {integrity: sha512-NwnWwh05AoqLGyx8JpKPjLI+ZEEFsbTMObnto13eFgmr8ImlBMRva+5My6k5MUr7up6A/rl+swQ5MA0ZaABvpQ==}
 
-  '@meowdown/markdown@0.65.5':
-    resolution: {integrity: sha512-oFS+fou6bvyRL/bXXlxYsBqbqmWxfOt4YbsshZRiwYm55wTJX8Y68VOpG/xj+d2WxOP5byy9G3ri1kVkcZ4rtA==}
+  '@meowdown/markdown@0.65.6':
+    resolution: {integrity: sha512-GHWT4l2wRKSEYILEU5Ir8xKRBStzmNS7mMQIaSjZIkkHR+GEiIDaGAjkd82D4udPv0thfZ1fLe+v0KQH3pBAbQ==}
 
-  '@meowdown/react@0.65.5':
-    resolution: {integrity: sha512-+1hxDGV2jCZ8Ms+X+Ked6K+u0FphXiYJ6aO3y19X3gC4gUm1Us6NlQXYtWMVJulFbn5DeBh3YmdoEb/VpPNc0w==}
+  '@meowdown/react@0.65.6':
+    resolution: {integrity: sha512-hFoZ3yauWIXte2EmrhOxvWE6AEPKiXW7e9AzRUzkR3zVNMKLZzCKh6299HzrCaBwmlvHCiAXeNPiZnex03alQg==}
     peerDependencies:
       react: ^19.0.0
       react-dom: ^19.0.0
@@ -2794,7 +2794,7 @@ snapshots:
       hono: 4.13.2
       zod: 4.4.3
 
-  '@iconify-icons/lucide@1.2.135':
+  '@iconify-icons/lucide@1.2.136':
     dependencies:
       '@iconify/types': 2.0.0
 
@@ -2921,13 +2921,13 @@ snapshots:
 
   '@marijn/find-cluster-break@1.0.3': {}
 
-  '@meowdown/core@0.65.5(@lezer/common@1.5.2)(@shikijs/types@4.4.3)(@types/hast@3.0.5)(prosemirror-model@1.25.11)(prosemirror-state@1.4.4)(prosemirror-transform@1.12.0)(prosemirror-view@1.42.2)':
+  '@meowdown/core@0.65.6(@lezer/common@1.5.2)(@shikijs/types@4.4.3)(@types/hast@3.0.5)(prosemirror-model@1.25.11)(prosemirror-state@1.4.4)(prosemirror-transform@1.12.0)(prosemirror-view@1.42.2)':
     dependencies:
       '@codemirror/language': 6.12.4
       '@codemirror/language-data': 6.5.2
       '@floating-ui/dom': 1.8.0
       '@lezer/highlight': 1.2.3
-      '@meowdown/markdown': 0.65.5
+      '@meowdown/markdown': 0.65.6
       '@ocavue/utils': 1.7.0
       '@prosekit/core': 0.13.0(prosemirror-model@1.25.11)(prosemirror-state@1.4.4)(prosemirror-transform@1.12.0)
       '@prosekit/extensions': 0.18.0(@lezer/common@1.5.2)(@lezer/highlight@1.2.3)(@shikijs/types@4.4.3)(@types/hast@3.0.5)(prosemirror-model@1.25.11)(prosemirror-state@1.4.4)(prosemirror-transform@1.12.0)(prosemirror-view@1.42.2)
@@ -2964,15 +2964,15 @@ snapshots:
       - y-prosemirror
       - yjs
 
-  '@meowdown/markdown@0.65.5':
+  '@meowdown/markdown@0.65.6':
     dependencies:
       '@lezer/common': 1.5.2
       '@lezer/markdown': 1.7.2
 
-  '@meowdown/react@0.65.5(@lezer/common@1.5.2)(@lezer/highlight@1.2.3)(@shikijs/types@4.4.3)(@types/hast@3.0.5)(@types/react@19.2.18)(prosemirror-model@1.25.11)(prosemirror-state@1.4.4)(prosemirror-transform@1.12.0)(prosemirror-view@1.42.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@meowdown/react@0.65.6(@lezer/common@1.5.2)(@lezer/highlight@1.2.3)(@shikijs/types@4.4.3)(@types/hast@3.0.5)(@types/react@19.2.18)(prosemirror-model@1.25.11)(prosemirror-state@1.4.4)(prosemirror-transform@1.12.0)(prosemirror-view@1.42.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
       '@base-ui/react': 1.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      '@meowdown/core': 0.65.5(@lezer/common@1.5.2)(@shikijs/types@4.4.3)(@types/hast@3.0.5)(prosemirror-model@1.25.11)(prosemirror-state@1.4.4)(prosemirror-transform@1.12.0)(prosemirror-view@1.42.2)
+      '@meowdown/core': 0.65.6(@lezer/common@1.5.2)(@shikijs/types@4.4.3)(@types/hast@3.0.5)(prosemirror-model@1.25.11)(prosemirror-state@1.4.4)(prosemirror-transform@1.12.0)(prosemirror-view@1.42.2)
       '@ocavue/utils': 1.7.0
       '@prosekit/core': 0.13.0(prosemirror-model@1.25.11)(prosemirror-state@1.4.4)(prosemirror-transform@1.12.0)
       '@prosekit/pm': 0.1.19

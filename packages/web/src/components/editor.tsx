@@ -8,6 +8,7 @@ import {
 import { useElementScrollRestoration, useSearch } from '@tanstack/react-router';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { uploadAsset } from '../api.ts';
+import { defineDetailsBlocks } from '../details-blocks.ts';
 import { watchImageLoading } from '../image-loading.ts';
 import { defineLinkBlocks } from '../link-blocks.tsx';
 import { dirname, isMarkdown, join, resolveImageUrl, stripExtension } from '../lib/paths.ts';
@@ -35,6 +36,20 @@ const PLACEHOLDER = '开始写点什么…';
 function LinkBlocks() {
   const linkEmbeds = useStore((s) => s.settings.linkEmbeds);
   useExtension(useMemo(() => (linkEmbeds ? defineLinkBlocks() : null), [linkEmbeds]));
+  return null;
+}
+
+/**
+ * Registers the `<details>` folding.
+ *
+ * Which folds the reader has opened lives in the plugin's own state, and the
+ * path is what scopes it: a new file gets a new plugin and starts from the
+ * markdown's `open` attributes, while the formatter's write-back — a new
+ * document under the same path — leaves the folds alone.
+ */
+function DetailsBlocks() {
+  const docPath = useStore((s) => s.docPath);
+  useExtension(useMemo(() => defineDetailsBlocks(docPath), [docPath]));
   return null;
 }
 
@@ -214,6 +229,7 @@ export function Editor() {
         resolveImageUrl={resolveImage}
       >
         <LinkBlocks />
+        <DetailsBlocks />
         <FrontmatterTable />
       </MeowdownEditor>
     </div>
