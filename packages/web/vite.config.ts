@@ -22,9 +22,7 @@ const PAGE_PORT = 2234;
 const DAEMON = `http://127.0.0.1:${process.env.MD_PORT ?? '2235'}`;
 
 export default defineConfig({
-  // React Compiler: plugin-react 的 compiler 选项还在 Unreleased（PR #1419），
-  // 发版后装上 oxc-transform-react 并把 react() 改成 react({ compiler: true }) 即可
-  plugins: [react(), tailwindcss()],
+  plugins: [react({ compiler: true }), tailwindcss()],
   optimizeDeps: {
     exclude: ['@xlsama/md'],
   },
