@@ -373,8 +373,8 @@ export function extractLinkMeta(html: string, finalUrl: URL): LinkMeta {
         const href = el.getAttribute('href');
         if (rel === '' || href === null) return;
         const tokens = rel.split(/\s+/);
-        const wanted = ['icon', 'shortcut', 'apple-touch-icon', 'apple-touch-icon-precomposed', 'mask-icon'];
-        if (!tokens.some((token) => wanted.includes(token))) return;
+        const wanted = new Set(['icon', 'shortcut', 'apple-touch-icon', 'apple-touch-icon-precomposed', 'mask-icon']);
+        if (!tokens.some((token) => wanted.has(token))) return;
         icons.push({ rel, href });
       },
     });

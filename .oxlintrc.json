@@ -1,13 +1,25 @@
 {
-  "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/npm/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "react", "oxc"],
-  "options": {
-    "typeAware": true,
-    "typeCheck": true
-  },
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["eslint", "typescript", "unicorn", "oxc", "react", "import", "promise"],
   "categories": {
     "correctness": "error",
-    "suspicious": "warn"
+    "suspicious": "warn",
+    "perf": "warn"
   },
-  "ignorePatterns": ["**/dist/**", "**/node_modules/**"]
+  "options": { "typeAware": true, "typeCheck": true },
+  "rules": {
+    "react/react-in-jsx-scope": "off",
+    "typescript/no-base-to-string": "off",
+    "typescript/restrict-template-expressions": "off",
+    "typescript/no-explicit-any": "warn",
+    "no-console": "warn",
+    "import/no-cycle": "error"
+  },
+  "overrides": [
+    {
+      "files": ["packages/md/**"],
+      "plugins": ["eslint", "typescript", "unicorn", "oxc", "import", "promise"],
+      "rules": { "no-console": "off" }
+    }
+  ]
 }

@@ -52,7 +52,7 @@ describe('scrollRestorationKey', () => {
   });
 });
 
-const TREE = ['index.md', 'docs/alpha.md'];
+const TREE = new Set(['index.md', 'docs/alpha.md']);
 
 function input(overrides: Partial<WorkspaceInput> = {}): WorkspaceInput {
   return {
@@ -61,7 +61,7 @@ function input(overrides: Partial<WorkspaceInput> = {}): WorkspaceInput {
     focus: null,
     currentPath: null,
     dirty: false,
-    exists: (path) => TREE.includes(path),
+    exists: (path) => TREE.has(path),
     ...overrides,
   };
 }
