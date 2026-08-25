@@ -8,6 +8,7 @@ import {
   healthResponseSchema,
   openResponseSchema,
   type HealthResponse,
+  type OpenResponse,
 } from './protocol.ts';
 import { settingsPath } from './settings.ts';
 import { ensureStateDir, logPath, readState, resolvePort } from './state.ts';
@@ -107,6 +108,14 @@ async function waitForHealth(port: number, timeoutMs = 5000): Promise<HealthResp
   return null;
 }
 
+/**
+ * Replaces the daemon at `pid` with a fresh one, and answers with its health.
+ *
+ * The new process is recognised by its pid rather than by its version: a
+ * restart is asked for over a lost workspace grant as well as over an upgrade,
+ * and in that first case the old and new builds are the same, so a version
+ * check would accept the dying daemon as the replacement.
+ */
 async function restartDaemon(port: number, pid: number): Promise<HealthResponse | null> {
   try {
     process.kill(pid, 'SIGTERM');
@@ -116,7 +125,7 @@ async function restartDaemon(port: number, pid: number): Promise<HealthResponse 
     const health = await fetchHealth(port, 400);
     // launchd (KeepAlive) may already have brought the new code back up; with
     // no launchd around, the process simply stays gone and we start it here.
-    if (health?.version === pkg.version) return health;
+    if (health && health.pid !== pid) return health;
     if (!health) {
       await spawnDaemon(port);
       return waitForHealth(port);
@@ -124,6 +133,76 @@ async function restartDaemon(port: number, pid: number): Promise<HealthResponse 
     await Bun.sleep(150);
   }
   return null;
+}
+
+/**
+ * What *this* process can do with `target` — the yardstick a daemon claiming it
+ * cannot is measured against. A file is judged by the directory that will
+ * become the workspace root, which is what the daemon lists and watches.
+ */
+function localAccess(target: string): { readable: boolean; watchable: boolean } {
+  const dir = fs.statSync(target, { throwIfNoEntry: false })?.isDirectory() === true
+    ? target
+    : path.dirname(target);
+  let readable = true;
+  let watchable = true;
+  try {
+    fs.readdirSync(dir);
+  } catch {
+    readable = false;
+  }
+  try {
+    fs.watch(dir, { recursive: true, persistent: false }, () => {}).close();
+  } catch {
+    watchable = false;
+  }
+  return { readable, watchable };
+}
+
+function warnDegraded(health: HealthResponse): void {
+  if (!health.readable) {
+    console.error(`md: cannot list ${health.workspace ?? 'the workspace'} — the file tree will be empty`);
+  } else if (!health.watching) {
+    console.error('md: no filesystem watcher — files changed by other programs will not refresh');
+  } else {
+    return;
+  }
+  if (process.platform === 'darwin') {
+    console.error('md: on macOS, grant access under System Settings → Privacy & Security → Files and Folders');
+  }
+}
+
+/**
+ * Restarts a daemon that has lost its access to the workspace just opened.
+ *
+ * macOS grants the folders under privacy control — `~/Downloads`,
+ * `~/Documents`, `~/Desktop` — to the process that asks, and a daemon detached
+ * from the terminal that spawned it does not keep that grant indefinitely:
+ * days later `readdir` and `fs.watch` answer `EPERM`, the file tree reads as
+ * empty and nothing external refreshes again. A daemon started from this
+ * command inherits this terminal's own access, so a restart is the whole cure.
+ *
+ * The restart is conditional on this process actually being able to do what
+ * the daemon could not, because the same symptoms have causes no restart can
+ * fix — a workspace on a network mount is unwatchable for everyone, and
+ * reopening it must not respawn the daemon on every invocation.
+ *
+ * Answers whether the daemon was replaced, which leaves the caller's open
+ * stale.
+ */
+async function healAccess(port: number, target: string): Promise<boolean> {
+  const health = await fetchHealth(port);
+  if (!health || (health.readable && health.watching)) return false;
+  const local = localAccess(target);
+  if (!((local.readable && !health.readable) || (local.watchable && !health.watching))) {
+    warnDegraded(health);
+    return false;
+  }
+  console.log('md: daemon lost access to the workspace, restarting…');
+  if (!(await restartDaemon(port, health.pid))) {
+    fail(`daemon restart failed on port ${port} — see ${logPath()}`);
+  }
+  return true;
 }
 
 async function openBrowser(url: string): Promise<void> {
@@ -209,6 +288,21 @@ async function raiseTab(origins: string[]): Promise<boolean> {
   }
 }
 
+async function postOpen(port: number, resolved: string): Promise<OpenResponse> {
+  const res = await fetch(`http://127.0.0.1:${port}/api/open`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ path: resolved }),
+  });
+  if (!res.ok) {
+    const body: unknown = await res.json().catch(() => ({}));
+    const message =
+      body && typeof body === 'object' && 'error' in body ? String((body).error) : res.statusText;
+    fail(`open failed: ${message}`);
+  }
+  return openResponseSchema.parse(await res.json());
+}
+
 async function commandOpen(target: string | undefined, port: number): Promise<void> {
   let resolved: string;
   if (target) {
@@ -232,18 +326,15 @@ async function commandOpen(target: string | undefined, port: number): Promise<vo
     if (!health) fail(`daemon failed to start on port ${port} — see ${logPath()}`);
   }
 
-  const res = await fetch(`http://127.0.0.1:${port}/api/open`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ path: resolved }),
-  });
-  if (!res.ok) {
-    const body: unknown = await res.json().catch(() => ({}));
-    const message =
-      body && typeof body === 'object' && 'error' in body ? String((body).error) : res.statusText;
-    fail(`open failed: ${message}`);
+  let data = await postOpen(port, resolved);
+  // Only once the workspace is set does the daemon know whether it can read it,
+  // so the check belongs after the open — and a restart invalidates the answer
+  // just parsed, hence the second one.
+  if (await healAccess(port, resolved)) {
+    data = await postOpen(port, resolved);
+    const healed = await fetchHealth(port);
+    if (healed) warnDegraded(healed);
   }
-  const data = openResponseSchema.parse(await res.json());
   if (process.env['MD_NO_OPEN'] === '1') {
     console.log(`md: ${data.url}`);
     return;

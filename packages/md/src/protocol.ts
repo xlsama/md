@@ -286,10 +286,10 @@ export const linkMetaResponseSchema = z.discriminatedUnion('ok', [
 export type LinkMetaResponse = z.infer<typeof linkMetaResponseSchema>;
 
 /**
- * `GET /api/health`. Beyond liveness it reports the two capabilities that can
- * be missing at runtime — ripgrep on `PATH`, and a live filesystem watcher —
- * so the CLI and the browser can both say what is degraded rather than
- * behaving oddly.
+ * `GET /api/health`. Beyond liveness it reports the capabilities that can be
+ * missing at runtime — ripgrep on `PATH`, a live filesystem watcher, and read
+ * access to the workspace itself — so the CLI and the browser can both say
+ * what is degraded rather than behaving oddly.
  */
 export const healthResponseSchema = z.object({
   pid: z.number(),
@@ -304,6 +304,12 @@ export const healthResponseSchema = z.object({
    */
   ripgrep: z.boolean().catch(false),
   watching: z.boolean().catch(false),
+  /**
+   * Defaults to `true` for the same reason, and because the honest reading of
+   * a daemon too old to answer is "no complaint", not "the workspace is
+   * unreadable".
+   */
+  readable: z.boolean().catch(true),
 });
 
 export type HealthResponse = z.infer<typeof healthResponseSchema>;

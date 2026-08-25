@@ -143,6 +143,7 @@ function createRoutes(ctx: DaemonContext) {
         clients: ctx.clients.size,
         ripgrep: hasRipgrep(),
         watching: ctx.workspace.watching,
+        readable: ctx.workspace.readable,
       })
     )
     .post('/api/open', zValidator('json', openRequestSchema), async (c) => {

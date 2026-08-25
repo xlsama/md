@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.11
+
+工作区读不到时不再假装成空目录：daemon 上报读取与监听是否可用，`md <path>` 会重启一个失去了工作区访问权的 daemon（macOS 上 `~/Downloads`、`~/Documents`、`~/Desktop` 的授权会随时间失效），页面也会说清楚是「读不到」还是「监听不了」/ A workspace it cannot read no longer reads as an empty one: the daemon reports whether it can list and watch the root, `md <path>` restarts a daemon that has lost access to it (on macOS the grants for `~/Downloads`, `~/Documents` and `~/Desktop` expire), and the page says which of the two failed.
+
 ## 0.1.7
 
 设置面板不再用工具名当标题，粘贴时转存图片默认关闭，自动保存延迟默认 100ms / Settings rows are named by what they do rather than by the tool behind them; importing pasted remote images is now off by default and the autosave delay defaults to 100ms.

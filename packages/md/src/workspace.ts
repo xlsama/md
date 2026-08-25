@@ -27,6 +27,14 @@ export class Workspace {
    * the browser can say so out loud instead of silently going stale.
    */
   watching = false;
+  /**
+   * Whether the root could be listed on the last scan. `false` means the empty
+   * tree is a refusal, not an empty folder — on macOS a daemon detached from
+   * the terminal that spawned it loses its grant to the folders under privacy
+   * control (`~/Downloads`, `~/Documents`, `~/Desktop`), and from then on both
+   * `readdir` and `fs.watch` come back `EPERM`.
+   */
+  readable = true;
 
   private watcher: Watcher | null = null;
   private echo = new EchoSuppressor(2000);
@@ -47,6 +55,13 @@ export class Workspace {
     const scan = await scanTree(realRoot);
     this.tree = scan.tree;
     this.treeSignature = scan.signature;
+    this.readable = scan.readable;
+    if (!scan.readable) {
+      console.error(
+        `[md] cannot list ${realRoot}; the file tree will be empty. ` +
+          'Re-run `md <path>` from a terminal that can read it.'
+      );
+    }
     // `focus` comes back from `state.json` across restarts, so it may well name
     // a file that was deleted in the meantime — and it is broadcast below, where
     // every page would immediately ask to open it.
@@ -125,7 +140,8 @@ export class Workspace {
     const run = this.rescanQueue.then(async () => {
       const root = this.root;
       if (!root) return false;
-      const { tree, signature } = await scanTree(root);
+      const { tree, signature, readable } = await scanTree(root);
+      this.readable = readable;
       if (!force && signature === this.treeSignature) return false;
       this.tree = tree;
       this.treeSignature = signature;

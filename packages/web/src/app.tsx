@@ -101,23 +101,32 @@ function useConnection(): void {
 }
 
 /**
- * Says so when the daemon is not watching the filesystem.
+ * Says so when the daemon cannot read the workspace, or is not watching it.
  *
- * `fs.watch` can fail outright — a workspace on a network mount, or too many
- * open descriptors — and the failure is otherwise invisible: everything keeps
- * working except the one guarantee the app is built around, that an agent's
- * edits show up on their own. Better a warning than a reader wondering why
- * their notes look stale.
+ * Both failures are otherwise invisible. A workspace it was refused reads as an
+ * empty file tree, indistinguishable from a folder holding no Markdown — the
+ * reader sees a blank sidebar and no reason for it. A dead watcher is subtler
+ * still: everything keeps working except the one guarantee the app is built
+ * around, that an agent's edits show up on their own.
+ *
+ * Re-asked whenever the workspace changes, because the answer is about *this*
+ * root: `md <path>` can move a healthy daemon onto a directory it is refused,
+ * and the reverse.
  */
-function useWatcherWarning(): void {
+function useAccessWarning(): void {
+  const root = useStore((s) => s.root);
   useEffect(() => {
+    if (root === '') return;
     void fetchHealth().then((health) => {
-      if (health === null || health.watching || health.workspace === null) return;
-      useStore
-        .getState()
-        .pushToast('外部改动监听不可用，其他程序修改的文件不会自动刷新', 'error');
+      if (health === null || health.workspace === null) return;
+      const toast = useStore.getState().pushToast;
+      if (!health.readable) {
+        toast('无法读取工作区目录，文件列表为空；在终端重新运行 md <路径> 以重新授权', 'error');
+        return;
+      }
+      if (!health.watching) toast('外部改动监听不可用，其他程序修改的文件不会自动刷新', 'error');
     });
-  }, []);
+  }, [root]);
 }
 
 /** Names the tab after the open document — see `documentTitle`. */
@@ -159,7 +168,7 @@ export function App() {
   const tocDocked = useTocDocked();
   useFileParam();
   useConnection();
-  useWatcherWarning();
+  useAccessWarning();
   useDocumentTitle();
   useSaveShortcut();
 
