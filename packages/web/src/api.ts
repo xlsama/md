@@ -54,7 +54,7 @@ export async function saveSettings(patch: SettingsPatch): Promise<Settings> {
  *
  * The daemon answers with `relativePath` (relative to the document, written
  * into the markdown) and `workspacePath` (relative to the workspace, used for
- * `/raw/` display); `resolveImageUrl` derives the latter from the former, so
+ * `/raw/` display); `resolveRawUrl` derives the latter from the former, so
  * only `relativePath` is handed back to the editor.
  */
 export async function uploadAsset(file: File, docPath: string): Promise<AssetResponse> {

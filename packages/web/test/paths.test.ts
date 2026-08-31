@@ -5,7 +5,7 @@ import {
   isMarkdown,
   join,
   normalize,
-  resolveImageUrl,
+  resolveRawUrl,
   stripExtension,
   withMarkdownExtension,
 } from '../src/lib/paths.ts';
@@ -47,35 +47,44 @@ describe('path helpers', () => {
   });
 });
 
-describe('resolveImageUrl', () => {
+describe('resolveRawUrl', () => {
   test('relative paths resolve against the document directory', () => {
-    expect(resolveImageUrl('assets/a.png', 'notes/day.md')).toBe('/raw/notes/assets/a.png');
-    expect(resolveImageUrl('a.png', 'day.md')).toBe('/raw/a.png');
+    expect(resolveRawUrl('assets/a.png', 'notes/day.md')).toBe('/raw/notes/assets/a.png');
+    expect(resolveRawUrl('a.png', 'day.md')).toBe('/raw/a.png');
   });
 
   test('parent traversal is normalized', () => {
-    expect(resolveImageUrl('../img/a.png', 'notes/deep/day.md')).toBe('/raw/notes/img/a.png');
-    expect(resolveImageUrl('../../../a.png', 'notes/day.md')).toBe('/raw/a.png');
+    expect(resolveRawUrl('../img/a.png', 'notes/deep/day.md')).toBe('/raw/notes/img/a.png');
+    expect(resolveRawUrl('../../../a.png', 'notes/day.md')).toBe('/raw/a.png');
   });
 
   test('absolute urls pass through', () => {
-    expect(resolveImageUrl('https://x.dev/a.png', 'a.md')).toBe('https://x.dev/a.png');
-    expect(resolveImageUrl('data:image/png;base64,AAA', 'a.md')).toBe('data:image/png;base64,AAA');
-    expect(resolveImageUrl('//cdn.dev/a.png', 'a.md')).toBe('//cdn.dev/a.png');
+    expect(resolveRawUrl('https://x.dev/a.png', 'a.md')).toBe('https://x.dev/a.png');
+    expect(resolveRawUrl('data:image/png;base64,AAA', 'a.md')).toBe('data:image/png;base64,AAA');
+    expect(resolveRawUrl('//cdn.dev/a.png', 'a.md')).toBe('//cdn.dev/a.png');
   });
 
   test('already-resolved and empty sources', () => {
-    expect(resolveImageUrl('/raw/a/b.png', 'a.md')).toBe('/raw/a/b.png');
-    expect(resolveImageUrl('   ', 'a.md')).toBeUndefined();
+    expect(resolveRawUrl('/raw/a/b.png', 'a.md')).toBe('/raw/a/b.png');
+    expect(resolveRawUrl('   ', 'a.md')).toBeUndefined();
+  });
+
+  test('a reference with no path of its own names no file', () => {
+    expect(resolveRawUrl('#heading', 'notes/day.md')).toBeUndefined();
+    expect(resolveRawUrl('?v=2', 'notes/day.md')).toBeUndefined();
+  });
+
+  test('non-image files resolve the same way', () => {
+    expect(resolveRawUrl('./assets/flow.html', 'docs/day.md')).toBe('/raw/docs/assets/flow.html');
   });
 
   test('query and hash suffixes survive, path segments are encoded', () => {
-    expect(resolveImageUrl('assets/a b.png', 'notes/day.md')).toBe('/raw/notes/assets/a%20b.png');
-    expect(resolveImageUrl('a.png?v=2', 'day.md')).toBe('/raw/a.png?v=2');
+    expect(resolveRawUrl('assets/a b.png', 'notes/day.md')).toBe('/raw/notes/assets/a%20b.png');
+    expect(resolveRawUrl('a.png?v=2', 'day.md')).toBe('/raw/a.png?v=2');
   });
 
   test('no document open: resolve against the workspace root', () => {
-    expect(resolveImageUrl('assets/a.png', null)).toBe('/raw/assets/a.png');
+    expect(resolveRawUrl('assets/a.png', null)).toBe('/raw/assets/a.png');
   });
 });
 

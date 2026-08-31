@@ -73,20 +73,24 @@ export function isAbsoluteUrl(src: string): boolean {
 }
 
 /**
- * Maps a markdown image `src` to something the browser can load.
+ * Maps a markdown `src`/`href` to something the browser can load — an image,
+ * an HTML page opened in a new tab, any file the workspace holds.
  *
  * - `http(s)://…`, `data:…` and other absolute URLs pass through untouched.
  * - Anything else is treated as relative to the directory of `docPath` and
  *   served through the daemon's `/raw/<workspace relative path>` route.
+ *
+ * A reference with no path of its own — a bare `#heading` — names no file and
+ * comes back `undefined` rather than resolving to the containing directory.
  */
-export function resolveImageUrl(src: string, docPath: string | null): string | undefined {
+export function resolveRawUrl(src: string, docPath: string | null): string | undefined {
   const trimmed = src.trim();
   if (trimmed === '') return undefined;
   if (isAbsoluteUrl(trimmed)) return trimmed;
   if (trimmed.startsWith('/raw/')) return trimmed;
 
-  const [rawPath = '', ...rest] = trimmed.split(/(?=[?#])/);
-  const suffix = rest.join('');
+  const [, rawPath = '', suffix = ''] = /^([^?#]*)([?#].*)?$/.exec(trimmed) ?? [];
+  if (rawPath === '') return undefined;
   const base = trimmed.startsWith('/') ? '' : (docPath === null ? '' : dirname(docPath));
   const workspacePath = join(base, rawPath);
   if (workspacePath === '') return undefined;

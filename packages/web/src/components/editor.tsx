@@ -12,7 +12,14 @@ import { uploadAsset } from '../api.ts';
 import { defineDetailsBlocks } from '../details-blocks.ts';
 import { watchImageLoading } from '../image-loading.ts';
 import { defineLinkBlocks } from '../link-blocks.tsx';
-import { dirname, isMarkdown, join, resolveImageUrl, stripExtension } from '../lib/paths.ts';
+import {
+  dirname,
+  isAbsoluteUrl,
+  isMarkdown,
+  join,
+  resolveRawUrl,
+  stripExtension,
+} from '../lib/paths.ts';
 import { locationScrollKey } from '../lib/route.ts';
 import { EDITOR_SCROLL_ID, restoreScrollTop } from '../lib/scroll.ts';
 import { focusTrailingParagraph, isBelowLastBlock } from '../lib/trailing-paragraph.ts';
@@ -135,7 +142,7 @@ export function Editor() {
   // instead of closing over props, so the identities stay stable: meowdown
   // reads several of them once at editor-creation time.
   const resolveImage = useCallback(
-    (src: string) => resolveImageUrl(src, session.currentPath()),
+    (src: string) => resolveRawUrl(src, session.currentPath()),
     []
   );
 
@@ -157,14 +164,30 @@ export function Editor() {
     session.open(resolved);
   }, []);
 
+  /**
+   * A link in the text goes wherever it points.
+   *
+   * Another note is opened in place — that is navigation within the document
+   * the reader is already in. Everything else leaves for a new tab: an
+   * external URL as itself, and any other file the workspace holds through
+   * `/raw/`, which serves it with a real content type, so a sibling `.html`
+   * renders as the page it is and its own relative assets resolve beside it.
+   *
+   * A bare `#anchor` names no file and is left alone.
+   */
   const handleLinkClick = useCallback(({ href }: { href: string }) => {
-    if (/^[a-z][a-z0-9+.-]*:/i.test(href)) {
+    if (isAbsoluteUrl(href)) {
       window.open(href, '_blank', 'noopener,noreferrer');
       return;
     }
     const current = session.currentPath();
-    const target = join(current === null ? '' : dirname(current), href.split('#')[0] ?? '');
-    if (isMarkdown(target)) session.open(target);
+    const target = join(current === null ? '' : dirname(current), href.split(/[?#]/)[0] ?? '');
+    if (isMarkdown(target)) {
+      session.open(target);
+      return;
+    }
+    const raw = resolveRawUrl(href, current);
+    if (raw !== undefined) window.open(raw, '_blank', 'noopener,noreferrer');
   }, []);
 
   /**
