@@ -417,6 +417,8 @@ body {
 
 .md-editor-host .ProseMirror .md-image-resizable[data-md-img='loaded'] img {
   opacity: 1;
+  /* Says the picture opens: clicking it is the lightbox, not a selection. */
+  cursor: zoom-in;
 }
 
 /* The sheen is a separate layer rather than a moving background-position: a

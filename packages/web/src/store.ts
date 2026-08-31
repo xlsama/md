@@ -1,6 +1,7 @@
 import type { Settings, SettingsPatch, TreeNode } from '@xlsama/md/protocol';
 import { create } from 'zustand';
 import { saveSettings } from './api.ts';
+import { stepIndex } from './lib/image-preview.ts';
 import { markdownFiles, toTreePaths } from './lib/tree.ts';
 import type { TocEntry } from './lib/toc.ts';
 import { readCachedSettings } from './lib/settings.ts';
@@ -33,6 +34,24 @@ export type Dialog =
   | { kind: 'rename'; path: string; isDir: boolean }
   | { kind: 'delete'; path: string; isDir: boolean };
 
+/** One picture the lightbox can show, already resolved to a loadable URL. */
+export interface PreviewImage {
+  src: string;
+  alt: string;
+}
+
+/**
+ * The open lightbox.
+ *
+ * The whole document's pictures travel together rather than just the one that
+ * was clicked, so `←` / `→` can walk them without reaching back into the
+ * editor's DOM a second time.
+ */
+export interface PreviewState {
+  images: PreviewImage[];
+  index: number;
+}
+
 const TOC_KEY = 'md:toc-open';
 const READ_ONLY_KEY = 'md:read-only';
 export const SETTINGS_KEY = 'md:settings';
@@ -64,6 +83,8 @@ interface State {
   readOnly: boolean;
   toasts: Toast[];
   dialog: Dialog | null;
+  /** The image lightbox, or null when it is closed. */
+  preview: PreviewState | null;
   /** The daemon's settings, mirrored locally so the first frame is themed. */
   settings: Settings;
   settingsOpen: boolean;
@@ -87,6 +108,9 @@ interface State {
   pushToast: (message: string, kind?: Toast['kind']) => void;
   dismissToast: (id: number) => void;
   setDialog: (dialog: Dialog | null) => void;
+  openPreview: (images: PreviewImage[], index: number) => void;
+  closePreview: () => void;
+  stepPreview: (delta: number) => void;
   setSettings: (settings: Settings) => void;
   setSettingsOpen: (open: boolean) => void;
   setDirtyPath: (path: string | null) => void;
@@ -112,6 +136,7 @@ export const useStore = create<State>()((set) => ({
   readOnly: localStorage.getItem(READ_ONLY_KEY) === '1',
   toasts: [],
   dialog: null,
+  preview: null,
   settings: initialSettings,
   settingsOpen: false,
   dirtyPath: null,
@@ -144,6 +169,22 @@ export const useStore = create<State>()((set) => ({
     set((state) => ({ toasts: [...state.toasts, { id: ++toastId, message, kind }] })),
   dismissToast: (id) => set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
   setDialog: (dialog) => set({ dialog }),
+  openPreview: (images, index) =>
+    set({ preview: images.length === 0 ? null : { images, index } }),
+  closePreview: () => set({ preview: null }),
+  // Wrapping is `stepIndex`'s job; the store only refuses to step a lightbox
+  // that is no longer open.
+  stepPreview: (delta) =>
+    set((state) =>
+      state.preview === null
+        ? {}
+        : {
+            preview: {
+              images: state.preview.images,
+              index: stepIndex(state.preview.index, delta, state.preview.images.length),
+            },
+          }
+    ),
   // The daemon owns the settings; this is the single point where a new version
   // of them lands, so the theme and the first-paint mirror are updated here
   // rather than in every caller.

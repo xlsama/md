@@ -1,3 +1,4 @@
+import type { ImageClickPayload } from '@meowdown/core';
 import {
   MeowdownEditor,
   useExtension,
@@ -17,10 +18,39 @@ import { EDITOR_SCROLL_ID, restoreScrollTop } from '../lib/scroll.ts';
 import { focusTrailingParagraph, isBelowLastBlock } from '../lib/trailing-paragraph.ts';
 import { resolveWikilink, searchNotes } from '../lib/tree.ts';
 import { session } from '../session.ts';
-import { useStore } from '../store.ts';
+import { useStore, type PreviewImage } from '../store.ts';
 import { FrontmatterTable } from './frontmatter-table.tsx';
 
 const PLACEHOLDER = '开始写点什么…';
+
+/** Meowdown wraps every rendered image in this element. */
+const IMAGE_WRAPPER = '.md-image-resizable';
+
+/**
+ * Every picture in the open document, in document order, with the clicked one
+ * located among them.
+ *
+ * Read off the DOM rather than out of the ProseMirror document because that is
+ * where the answers already are: the resolved URL each image is actually
+ * showing, and whether it loaded at all. A picture that failed is left out —
+ * there is nothing to preview — and so is anything outside the image wrapper,
+ * which is how link-card thumbnails stay out of the gallery.
+ */
+function gallery(
+  host: HTMLElement,
+  clicked: HTMLImageElement | null
+): { images: PreviewImage[]; index: number } {
+  const images: PreviewImage[] = [];
+  let index = 0;
+  for (const img of host.querySelectorAll<HTMLImageElement>(`${IMAGE_WRAPPER} img`)) {
+    if (img.closest(IMAGE_WRAPPER)?.getAttribute('data-md-img') === 'failed') continue;
+    const src = img.currentSrc === '' ? img.src : img.currentSrc;
+    if (src === '') continue;
+    if (img === clicked) index = images.length;
+    images.push({ src, alt: img.alt });
+  }
+  return { images, index };
+}
 
 /**
  * Registers the link-block decorations.
@@ -137,6 +167,23 @@ export function Editor() {
     if (isMarkdown(target)) session.open(target);
   }, []);
 
+  /**
+   * Opens the lightbox on the picture that was clicked.
+   *
+   * The element is taken from the event rather than the payload's `src`: it is
+   * what the browser is actually showing — resolver output, redirects and all —
+   * and it is also what locates the picture within the document's gallery.
+   */
+  const handleImageClick = useCallback(({ event }: ImageClickPayload) => {
+    const host = hostRef.current;
+    if (host === null) return;
+    const target = event.target;
+    const clicked = target instanceof HTMLImageElement ? target : null;
+    if (clicked?.closest(IMAGE_WRAPPER)?.getAttribute('data-md-img') === 'failed') return;
+    const { images, index } = gallery(host, clicked);
+    useStore.getState().openPreview(images, index);
+  }, []);
+
   const handleFilePaste = useCallback(async (file: File): Promise<string | undefined> => {
     const docPathNow = session.currentPath();
     if (docPathNow === null) {
@@ -224,6 +271,7 @@ export function Editor() {
         onWikilinkSearch={handleWikilinkSearch}
         onWikilinkClick={handleWikilinkClick}
         onLinkClick={handleLinkClick}
+        onImageClick={handleImageClick}
         onFilePaste={handleFilePaste}
         onFileSaveError={handleFileSaveError}
         resolveImageUrl={resolveImage}

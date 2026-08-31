@@ -5,6 +5,7 @@ import { ConflictBanner } from './components/conflict-banner.tsx';
 import { Dialogs } from './components/dialogs.tsx';
 import { Editor } from './components/editor.tsx';
 import { Sidebar } from './components/file-tree.tsx';
+import { ImagePreview } from './components/image-preview.tsx';
 import { Icon } from './components/icon.tsx';
 import { SettingsDialog } from './components/settings-dialog.tsx';
 import { Toasts } from './components/toasts.tsx';
@@ -196,6 +197,7 @@ export function App() {
         </>
       )}
       <Dialogs />
+      <ImagePreview />
       <SettingsDialog />
       <Toasts />
     </div>
